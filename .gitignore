@@ -24,3 +24,27 @@ dist/
 
 # ログ
 *.log
+
+# 画像
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+
+# 動画
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# 音声
+*.mp3
+*.wav
+*.flac
+*.aac
+*.m4a
+*.ogg
