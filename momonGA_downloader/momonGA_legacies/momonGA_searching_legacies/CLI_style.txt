@@ -1,0 +1,52 @@
+============================================================
+ID: 0
+STATUS: not_found
+
+title: ""
+date: ""
+type: ""
+pages: 
+
+parody: ""
+circle: ""
+author:""
+characters:""
+content:""
+url: ""
+
+Finish
+
+============================================================
+ID: 850746
+STATUS: found
+
+title: "ソードオブアスナ"
+date: "2015年9月11日17時"
+type: "同人誌"
+pages: 21
+
+parody: "ソードアート・オンライン"
+circle: "おしるこ缶"
+author:"ぴりりねぎ"
+characters:
+    "asuna yuuki",
+    "kazuto kirigaya"
+content:
+    "anal",
+    "bike shorts",
+    "blowjob",
+    "dick growth",
+    "dickgirl on male",
+    "femdom",
+    "futanari",
+    "mosaic censorship",
+    "pantyhose",
+    "pegging",
+    "strap-on",
+    "tomgirl"
+
+url: "https://momon-ga.com/fanzine/mo850746/"
+
+Finish
+
+============================================================

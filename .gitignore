@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# 実行状態保存
+*_resume.json
+*_state.json
+
+# Android
+*.apk
+
+# PyInstaller
+build/
+dist/
+
+# Windows実行ファイル
+*.exe
+
+# ログ
+*.log
