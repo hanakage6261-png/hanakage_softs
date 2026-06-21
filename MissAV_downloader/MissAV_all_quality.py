@@ -1,6 +1,9 @@
 ﻿from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import hashlib
+import os
 import re
 import shlex
 import shutil
@@ -28,11 +31,13 @@ except ImportError as exc:  # pragma: no cover - import guard
 SCRIPT_DIR = Path(__file__).resolve().parent
 SINGLE_OUTPUT_DIR_NAME = "MissAV_download"
 ALL_QUALITY_OUTPUT_DIR_NAME = "MissAV_all_quality"
+TEMP_ROOT_DIR_NAME = "MissAV_work"
 PROGRAM_NAME = Path(sys.argv[0]).name
 PROGRAM_STEM = Path(sys.argv[0]).stem.casefold()
 ALL_QUALITY_MODE = "all_quality" in PROGRAM_STEM
 DEFAULT_OUTPUT_DIR = Path.home() / "Downloads" / (ALL_QUALITY_OUTPUT_DIR_NAME if ALL_QUALITY_MODE else SINGLE_OUTPUT_DIR_NAME)
-DEFAULT_OUTPUT_TEMPLATE = "%(title).180B.%(ext)s"
+DEFAULT_TEMP_ROOT = Path.home() / "Downloads" / TEMP_ROOT_DIR_NAME
+DEFAULT_OUTPUT_TEMPLATE = "%(title).180B."
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -102,6 +107,8 @@ class DownloadStats:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    output_dir_was_set = any(item == "-o" or item == "--output-dir" or item.startswith("--output-dir=") for item in raw_argv)
     description = (
         "Download every detected quality for media referenced by a page URL plus a direct m3u8/mp4 URL or browser Copy as cURL input."
         if ALL_QUALITY_MODE
@@ -120,7 +127,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("urls", nargs="*", help="One direct media URL such as playlist.m3u8 or video.m3u8.")
     parser.add_argument("--page-url", metavar="URL", help="The watch page URL used to fetch title and thumbnail metadata.")
     parser.add_argument("-f", "--url-file", action="append", default=[], metavar="PATH", help="Read direct media URLs from a text file.")
-    parser.add_argument("-o", "--output-dir", default=str(DEFAULT_OUTPUT_DIR), metavar="DIR", help=f"Directory where files are saved. Default: {DEFAULT_OUTPUT_DIR}")
+    parser.add_argument("-o", "--output-dir", default=str(DEFAULT_OUTPUT_DIR), metavar="DIR", help=f"Directory where finished files are saved. Default: {DEFAULT_OUTPUT_DIR}")
+    parser.add_argument("--temp-root", default=str(DEFAULT_TEMP_ROOT), metavar="DIR", help=f"Directory on the internal SSD used for temporary downloads and MP4 assembly. Default: {DEFAULT_TEMP_ROOT}")
     parser.add_argument("--filename", metavar="NAME", help="Optional output filename. If omitted, the page title is used.")
     parser.add_argument("--referer", metavar="URL", help="Optional Referer header. If omitted, the page URL is used.")
     parser.add_argument("--format", dest="format_selector", metavar="SELECTOR", help="yt-dlp format selector. If omitted, the script shows streams and prompts.")
@@ -136,7 +144,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--sleep-between-jobs", type=float, default=0.0, metavar="SECONDS", help="Optional fixed pause after each completed job in interactive queue mode.")
     parser.add_argument("--slow-threshold-kib", type=float, default=700.0, metavar="KIB_PER_SEC", help="If the measured average transfer speed falls below this value, wait before the next queued job. Set 0 to disable. Default: 700")
     parser.add_argument("--slow-sleep-seconds", type=float, default=120.0, metavar="SECONDS", help="Pause length when a slow transfer is detected in interactive queue mode. Set 0 to disable. Default: 120")
+    parser.add_argument("--parallel-jobs", type=int, default=2, metavar="N", help="Maximum simultaneous queued downloads in interactive mode. Default: 2")
     args = parser.parse_args(argv)
+    args.output_dir_was_set = output_dir_was_set
+    if args.parallel_jobs < 1:
+        parser.error("--parallel-jobs must be 1 or greater.")
 
     if args.cookies and args.cookies_from_browser:
         parser.error("Use either --cookies or --cookies-from-browser, not both.")
@@ -155,7 +167,6 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--filename can only be used when downloading one URL.")
 
     return args
-
 
 def read_text_file(path: Path) -> str:
     for encoding in ("utf-8-sig", "utf-8", "cp932"):
@@ -418,6 +429,139 @@ def resolve_output_dir(path_text: str) -> Path:
     return path.resolve()
 
 
+
+def resolve_temp_root(path_text: str) -> Path:
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = SCRIPT_DIR / path
+    return path.resolve()
+
+
+def get_output_folder_name() -> str:
+    return ALL_QUALITY_OUTPUT_DIR_NAME if ALL_QUALITY_MODE else SINGLE_OUTPUT_DIR_NAME
+
+
+def discover_external_drive_roots() -> list[tuple[Path, str]]:
+    if os.name != "nt":
+        return []
+    system_drive = os.environ.get("SystemDrive", "C:").rstrip("\\/")
+    system_root = (system_drive + "\\").upper()
+    command = [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -in 2,3 } | ForEach-Object { \"$($_.DeviceID)|$($_.VolumeName)|$($_.DriveType)\" }",
+    ]
+    try:
+        result = subprocess.run(command, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.CalledProcessError):
+        return []
+
+    candidates: list[tuple[Path, str]] = []
+    seen: set[str] = set()
+    for line in result.stdout.splitlines():
+        parts = line.strip().split("|")
+        if not parts or not parts[0]:
+            continue
+        root_text = parts[0].strip()
+        if not root_text.endswith("\\"):
+            root_text += "\\"
+        if root_text.upper() == system_root:
+            continue
+        if root_text.upper() in seen:
+            continue
+        seen.add(root_text.upper())
+        label = parts[1].strip() if len(parts) > 1 and parts[1].strip() else "External drive"
+        drive_type = parts[2].strip() if len(parts) > 2 else ""
+        if drive_type == "2":
+            label += " (removable)"
+        candidates.append((Path(root_text), label))
+    return candidates
+
+
+def maybe_prompt_output_location(args: argparse.Namespace) -> argparse.Namespace:
+    if getattr(args, "output_dir_was_set", False) or not sys.stdin.isatty():
+        return args
+
+    choices: list[tuple[str, Path]] = [("PC Downloads", DEFAULT_OUTPUT_DIR)]
+    for root, label in discover_external_drive_roots():
+        choices.append((label, root / get_output_folder_name()))
+
+    print("\nOutput location:")
+    for index, (label, path) in enumerate(choices, start=1):
+        print(f"{index}. {label}: {path}")
+    choice = input("Select output location [1]: ").strip()
+    if not choice:
+        return args
+    if not choice.isdigit() or not (1 <= int(choice) <= len(choices)):
+        print("Invalid output location. Using the default PC Downloads folder.")
+        return args
+    args.output_dir = str(choices[int(choice) - 1][1])
+    return args
+
+
+def build_work_output_dir(args: argparse.Namespace, title_text: str, source_url: str, suffix: str | None = None) -> Path:
+    title_part = sanitize_filename(title_text)
+    digest = hashlib.sha1(source_url.encode("utf-8", errors="ignore")).hexdigest()[:8]
+    if suffix:
+        digest = f"{sanitize_filename(suffix)}_{digest}"
+    work_dir = resolve_temp_root(args.temp_root) / f"{title_part}__work_{digest}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    return work_dir
+
+
+def move_completed_file(source_path: Path, final_output_dir: Path, overwrite: bool) -> Path:
+    final_output_dir.mkdir(parents=True, exist_ok=True)
+    destination = final_output_dir / source_path.name
+    staging = destination.with_name(f"{destination.name}.transferring")
+    if destination.exists():
+        if overwrite:
+            destination.unlink()
+        else:
+            raise ValueError(f"Output file already exists: {destination}. Use --overwrite to replace it.")
+    staging.unlink(missing_ok=True)
+
+    source_drive = source_path.resolve().drive.casefold()
+    destination_drive = destination.resolve().drive.casefold()
+    if source_drive and source_drive == destination_drive:
+        source_path.replace(destination)
+        return destination
+
+    print(f"Transferring completed file to the selected drive: {destination}")
+    try:
+        shutil.copy2(source_path, staging)
+        staging.replace(destination)
+        source_path.unlink()
+    except Exception:
+        staging.unlink(missing_ok=True)
+        raise
+    return destination
+
+def cleanup_empty_work_dir(path: Path) -> None:
+    try:
+        path.rmdir()
+    except OSError:
+        pass
+
+
+def page_slug_from_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    parts = [part for part in parsed.path.split("/") if part and part.lower() not in {"ja", "en", "zh", "tw", "ko"}]
+    return parts[-1].casefold() if parts else None
+
+
+def validate_page_referer_consistency(args: argparse.Namespace) -> None:
+    page_slug = page_slug_from_url(args.page_url)
+    referer_slug = page_slug_from_url(args.referer)
+    if page_slug and referer_slug and page_slug != referer_slug:
+        raise ValueError(
+            "The page URL and the cURL Referer look like different videos.\n"
+            f"  Page URL slug: {page_slug}\n"
+            f"  Referer slug: {referer_slug}\n"
+            "Copy the playlist.m3u8/cURL again from the same page URL."
+        )
 def is_usable_page_title(value: str | None) -> bool:
     if value is None:
         return False
@@ -535,8 +679,8 @@ def build_run_output_template(args: argparse.Namespace, info_dict: dict[str, obj
     return build_literal_output_template(raw_title or source_url)
 
 
-def build_ydl_options(args: argparse.Namespace, *, format_selector: str | None = None, output_template: str | None = None) -> tuple[Path, dict[str, object]]:
-    output_dir = resolve_output_dir(args.output_dir)
+def build_ydl_options(args: argparse.Namespace, *, format_selector: str | None = None, output_template: str | None = None, output_dir_override: Path | None = None) -> tuple[Path, dict[str, object]]:
+    output_dir = output_dir_override.resolve() if output_dir_override is not None else resolve_output_dir(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     headers = parse_header_values(args.header)
     if args.referer:
@@ -739,9 +883,8 @@ def prompt_if_missing(args: argparse.Namespace) -> argparse.Namespace:
 
     if not args.referer and args.page_url:
         args.referer = args.page_url
-
+    validate_page_referer_consistency(args)
     return args
-
 
 def should_run_interactive_session(args: argparse.Namespace) -> bool:
     return bool(sys.stdin.isatty() and not args.page_url and not args.urls and not args.curl_file)
@@ -764,8 +907,8 @@ def build_job_args(base_args: argparse.Namespace, job: DownloadJob) -> argparse.
 
     if not job_args.referer:
         job_args.referer = job.page_url
+    validate_page_referer_consistency(job_args)
     return job_args
-
 
 def prompt_job_queue() -> list[DownloadJob]:
     print("\nQueue input mode")
@@ -788,10 +931,34 @@ def prompt_job_queue() -> list[DownloadJob]:
         jobs.append(DownloadJob(page_url=page_url, media_input=media_input))
 
 
+def normalized_media_identity(url: str) -> str:
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme.casefold(), (parsed.hostname or "").casefold(), parsed.path, "", "", ""))
+
+
+def validate_job_queue_consistency(base_args: argparse.Namespace, jobs: Sequence[DownloadJob]) -> None:
+    media_owners: dict[str, tuple[int, str]] = {}
+    for index, job in enumerate(jobs, start=1):
+        job_args = build_job_args(base_args, job)
+        if not job_args.urls:
+            raise ValueError(f"Job {index} did not contain a media URL.")
+        identity = normalized_media_identity(job_args.urls[0])
+        owner = media_owners.get(identity)
+        if owner is not None:
+            previous_index, previous_page = owner
+            raise ValueError(
+                "The same media playlist was assigned to more than one queued job.\n"
+                f"  Job {previous_index}: {previous_page}\n"
+                f"  Job {index}: {job.page_url}\n"
+                "The queue was stopped to prevent duplicate videos with incorrect titles or thumbnails."
+            )
+        media_owners[identity] = (index, job.page_url)
+
 def print_summary(args: argparse.Namespace, output_dir: Path, page_metadata: PageMetadata | None) -> None:
     print(f"Page URL: {args.page_url}")
     print(f"URLs: {len(args.urls)}")
-    print(f"Output directory: {output_dir}")
+    print(f"Final output directory: {output_dir}")
+    print(f"Temporary work root: {resolve_temp_root(args.temp_root)}")
     print(f"Mode: {'metadata check only' if args.dry_run else 'download'}")
     print("Direct media validation: enabled")
     print(f"Referer: {args.referer or 'not set'}")
@@ -1269,8 +1436,8 @@ def execute_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | No
     for url in args.urls:
         validate_direct_media_url(url)
 
-    output_dir, base_ydl_options = build_ydl_options(args)
-    print_summary(args, output_dir, page_metadata)
+    final_output_dir, base_ydl_options = build_ydl_options(args)
+    print_summary(args, final_output_dir, page_metadata)
 
     result = 0
     last_stats: DownloadStats | None = None
@@ -1282,6 +1449,8 @@ def execute_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | No
         print(f"Thumbnail: {page_metadata.thumbnail_url if page_metadata else 'not available'}")
 
         selected_format = choose_format_selector(args, info_dict)
+        work_output_dir = build_work_output_dir(args, effective_title, url, selected_format)
+        print(f"Temporary work folder: {work_output_dir}")
         direct_format = None
         if not args.dry_run and page_metadata and page_metadata.thumbnail_url and not args.no_thumbnail and not args.cookies_from_browser:
             direct_format = choose_direct_ffmpeg_format(info_dict, selected_format)
@@ -1298,8 +1467,8 @@ def execute_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | No
         if direct_format is not None:
             print("Download mode: one-pass ffmpeg with automatic thumbnail embedding.")
             try:
-                saved_path = download_with_ffmpeg_one_pass(args, direct_format, output_dir, effective_title, page_metadata.thumbnail_url)
-                print(f"Saved file: {saved_path.name}")
+                saved_path = download_with_ffmpeg_one_pass(args, direct_format, work_output_dir, effective_title, page_metadata.thumbnail_url)
+                print(f"Saved temporary file: {saved_path.name}")
             except ValueError as error:
                 print(f"One-pass ffmpeg failed. Falling back to yt-dlp download plus thumbnail post-processing. Reason: {error}")
                 direct_format = None
@@ -1307,18 +1476,23 @@ def execute_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | No
 
         if direct_format is None:
             run_output_template = build_run_output_template(args, info_dict, url, page_metadata)
-            _, run_options = build_ydl_options(args, format_selector=selected_format, output_template=run_output_template)
+            _, run_options = build_ydl_options(args, format_selector=selected_format, output_template=run_output_template, output_dir_override=work_output_dir)
             print("Download mode: yt-dlp download plus thumbnail post-processing.")
             with YoutubeDL(run_options) as downloader:
                 result = max(result, int(downloader.download([url]) or 0))
 
-            saved_path = build_final_video_path(output_dir, effective_title, args.filename)
+            saved_path = build_final_video_path(work_output_dir, effective_title, args.filename)
             if not args.dry_run and page_metadata and page_metadata.thumbnail_url and not args.no_thumbnail:
                 print("Post-processing: embedding the thumbnail into the MP4. This rewrites the file and can take time on large videos...")
-                thumbnail_path = download_thumbnail_file(page_metadata.thumbnail_url, output_dir, effective_title, args.page_url)
+                thumbnail_path = download_thumbnail_file(page_metadata.thumbnail_url, work_output_dir, effective_title, args.page_url)
                 embed_thumbnail(saved_path, thumbnail_path)
                 thumbnail_path.unlink(missing_ok=True)
                 print(f"Embedded thumbnail: {thumbnail_path.name}")
+
+        if saved_path is not None and not args.dry_run:
+            saved_path = move_completed_file(saved_path, final_output_dir, args.overwrite)
+            cleanup_empty_work_dir(work_output_dir)
+            print(f"Moved completed file to: {saved_path}")
 
         transfer_seconds = None if args.dry_run else time.perf_counter() - transfer_started
         average_speed_bps = calculate_average_speed(saved_path, transfer_seconds)
@@ -1333,7 +1507,6 @@ def execute_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | No
         if args.dry_run:
             print("Metadata check passed.")
     return int(result or 0), last_stats
-
 
 def execute_all_quality_downloads(args: argparse.Namespace) -> tuple[int, DownloadStats | None]:
     args = prompt_if_missing(args)
@@ -1389,7 +1562,7 @@ def execute_all_quality_downloads(args: argparse.Namespace) -> tuple[int, Downlo
             try:
                 quality_result, quality_stats = execute_downloads(quality_args)
             except (DownloadError, ValueError, OSError, requests.RequestException) as error:
-                print(f"Quality {quality_label} failed: {error}", file=sys.stderr)
+                print(f"Quality {quality_label} failed.\n{format_download_error(error)}", file=sys.stderr)
             result = max(result, int(quality_result or 0))
             last_stats = quality_stats
             maybe_pause_between_jobs(args, quality_stats, len(formats) - index)
@@ -1397,6 +1570,17 @@ def execute_all_quality_downloads(args: argparse.Namespace) -> tuple[int, Downlo
     return int(result or 0), last_stats
 
 
+def format_download_error(error: BaseException) -> str:
+    message = str(error)
+    normalized = message.casefold()
+    if "cloudflare" in normalized and ("anti-bot" in normalized or "403" in normalized):
+        return (
+            "Download failed: Cloudflare rejected the non-browser media request (HTTP 403).\n"
+            "Browser playback can still work while yt-dlp fails because Cloudflare may also evaluate the HTTPS/TLS client fingerprint.\n"
+            "A raw playlist.m3u8 URL is not sufficient; use a fresh full browser 'Copy as cURL' request from the working playback session.\n"
+            "If the full cURL request also produces this error, the accepted browser connection cannot be reproduced by this downloader without browser impersonation."
+        )
+    return f"Download failed: {message}"
 def run_interactive_session(base_args: argparse.Namespace, executor: Callable[[argparse.Namespace], tuple[int, DownloadStats | None]]) -> int:
     overall_result = 0
 
@@ -1405,32 +1589,76 @@ def run_interactive_session(base_args: argparse.Namespace, executor: Callable[[a
         if not jobs:
             return overall_result
 
-        print(f"\nStarting {len(jobs)} queued job(s)...")
-        for index, job in enumerate(jobs, start=1):
-            print(f"\n=== Job {index}/{len(jobs)} ===")
-            job_args = build_job_args(base_args, job)
-            job_result = 1
-            job_stats: DownloadStats | None = None
-            try:
-                job_result, job_stats = executor(job_args)
-            except CookieLoadError:
-                print("Could not load cookies from the selected browser. Close the browser and try again, or use --cookies cookies.txt.", file=sys.stderr)
-            except DownloadError as error:
-                print(f"Download failed: {error}", file=sys.stderr)
-            except (ValueError, OSError, requests.RequestException) as error:
-                print(f"Error: {error}", file=sys.stderr)
-            except KeyboardInterrupt:
-                print("\nStopped by user.", file=sys.stderr)
-                return max(overall_result, 130)
-            except Exception as error:  # pragma: no cover - defensive fallback
-                print(f"Unexpected error: {type(error).__name__}: {error}", file=sys.stderr)
-            overall_result = max(overall_result, job_result)
-            maybe_pause_between_jobs(base_args, job_stats, len(jobs) - index)
+        try:
+            validate_job_queue_consistency(base_args, jobs)
+        except ValueError as error:
+            print(f"Queue validation failed: {error}", file=sys.stderr)
+            continue
 
+        worker_count = min(max(1, int(base_args.parallel_jobs)), len(jobs))
+        print(f"\nStarting {len(jobs)} queued job(s) with up to {worker_count} simultaneous download(s)...")
+
+        if worker_count == 1:
+            for index, job in enumerate(jobs, start=1):
+                print(f"\n=== Job {index}/{len(jobs)} ===")
+                job_args = build_job_args(base_args, job)
+                job_result = 1
+                job_stats: DownloadStats | None = None
+                try:
+                    job_result, job_stats = executor(job_args)
+                except CookieLoadError:
+                    print("Could not load cookies from the selected browser. Close the browser and try again, or use --cookies cookies.txt.", file=sys.stderr)
+                except DownloadError as error:
+                    print(format_download_error(error), file=sys.stderr)
+                except (ValueError, OSError, requests.RequestException) as error:
+                    print(f"Error: {error}", file=sys.stderr)
+                except KeyboardInterrupt:
+                    print("\nStopped by user.", file=sys.stderr)
+                    return max(overall_result, 130)
+                except Exception as error:  # pragma: no cover - defensive fallback
+                    print(f"Unexpected error: {type(error).__name__}: {error}", file=sys.stderr)
+                overall_result = max(overall_result, job_result)
+                maybe_pause_between_jobs(base_args, job_stats, len(jobs) - index)
+            continue
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="missav") as pool:
+            future_jobs: dict[concurrent.futures.Future[tuple[int, DownloadStats | None]], tuple[int, DownloadJob]] = {}
+            for index, job in enumerate(jobs, start=1):
+                job_args = build_job_args(base_args, job)
+                print(f"\n=== Submitting job {index}/{len(jobs)}: {job.page_url} ===")
+                future = pool.submit(executor, job_args)
+                future_jobs[future] = (index, job)
+
+            try:
+                for future in concurrent.futures.as_completed(future_jobs):
+                    index, job = future_jobs[future]
+                    try:
+                        job_result, _ = future.result()
+                    except CookieLoadError:
+                        job_result = 1
+                        print(f"Job {index} failed: could not load browser cookies.", file=sys.stderr)
+                    except DownloadError as error:
+                        job_result = 1
+                        print(f"Job {index} failed ({job.page_url}).\n{format_download_error(error)}", file=sys.stderr)
+                    except (ValueError, OSError, requests.RequestException) as error:
+                        job_result = 1
+                        print(f"Job {index} failed ({job.page_url}): {error}", file=sys.stderr)
+                    except Exception as error:  # pragma: no cover - defensive fallback
+                        job_result = 1
+                        print(f"Job {index} failed unexpectedly: {type(error).__name__}: {error}", file=sys.stderr)
+                    else:
+                        print(f"\n=== Job {index}/{len(jobs)} completed ===")
+                    overall_result = max(overall_result, int(job_result or 0))
+            except KeyboardInterrupt:
+                print("\nStopping queued downloads...", file=sys.stderr)
+                for future in future_jobs:
+                    future.cancel()
+                return max(overall_result, 130)
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parse_args(argv)
+        args = maybe_prompt_output_location(args)
         executor = execute_all_quality_downloads if ALL_QUALITY_MODE else execute_downloads
         if should_run_interactive_session(args):
             return run_interactive_session(args, executor)
@@ -1440,7 +1668,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Could not load cookies from the selected browser. Close the browser and try again, or use --cookies cookies.txt.", file=sys.stderr)
         return 1
     except DownloadError as error:
-        print(f"Download failed: {error}", file=sys.stderr)
+        print(format_download_error(error), file=sys.stderr)
         return 1
     except (ValueError, OSError, requests.RequestException) as error:
         print(f"Error: {error}", file=sys.stderr)
@@ -1458,6 +1686,26 @@ if __name__ == "__main__":
     if exit_code:
         pause_before_exit()
     raise SystemExit(exit_code)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

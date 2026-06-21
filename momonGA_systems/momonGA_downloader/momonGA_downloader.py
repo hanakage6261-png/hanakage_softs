@@ -340,7 +340,7 @@ def extract_author(soup: BeautifulSoup) -> str:
         if author_text:
             return author_text
 
-    return "UnknownAuthor"
+    return ""
 
 
 def extract_text_by_id(soup: BeautifulSoup, element_id: str):
@@ -783,7 +783,7 @@ def process_work(session, save_root: str, metadata_connection, work: WorkSummary
     with tempfile.TemporaryDirectory(prefix=f"momonGA_{work.work_id}_") as temp_dir:
         images = download_gallery_images(session, work.work_id, work.total_pages, temp_dir)
         safe_title = sanitize_filename(work.title, work.work_id)
-        safe_author = sanitize_filename(work.author, "UnknownAuthor")
+        safe_author = sanitize_filename(work.author, "")
         local_archive = os.path.join(temp_dir, f"{safe_title}.cbz")
         build_cbz(images, local_archive)
 
@@ -894,6 +894,9 @@ def parse_excluded_indexes(raw_text: str, max_index: int):
 
 
 def prompt_excluded_works(collection_url: str, works):
+    if not works:
+        return works
+
     print("\n作者/サークルURLから作品URLを抽出しています。")
     print(f"元URL: {collection_url}")
 
@@ -926,6 +929,49 @@ def prompt_excluded_works(collection_url: str, works):
             f"{len(selected_works)} 件をダウンロード対象にします。"
         )
         return selected_works
+
+
+def prompt_exclude_downloaded_works(metadata_connection, works):
+    if not works:
+        return works
+
+    work_ids = [int(work.work_id) for work in works]
+    placeholders = ",".join("?" for _ in work_ids)
+    rows = metadata_connection.execute(
+        f"""
+        SELECT id
+        FROM works
+        WHERE downloaded = 1
+          AND id IN ({placeholders})
+        """,
+        work_ids,
+    ).fetchall()
+    downloaded_ids = {int(row["id"]) for row in rows}
+
+    if not downloaded_ids:
+        return works
+
+    downloaded_works = [
+        work for work in works
+        if int(work.work_id) in downloaded_ids
+    ]
+
+    print("\n過去にダウンロード済みの作品が見つかりました。")
+    for work in downloaded_works:
+        print(f"- {format_work_brief(work)}")
+
+    while True:
+        answer = input(
+            f"ダウンロード済み {len(downloaded_works)} 件を候補から除外しますか？ [Y/n]: "
+        ).strip().lower()
+        if answer in {"", "y", "yes"}:
+            return [
+                work for work in works
+                if int(work.work_id) not in downloaded_ids
+            ]
+        if answer in {"n", "no"}:
+            return works
+        print("y または n を入力してください。")
 
 
 def load_resume_queue():
@@ -1056,6 +1102,10 @@ def process_input_queue(session, save_root: str, metadata_connection, input_urls
 
             if current_kind == "collection":
                 target_works = resolve_collection_targets(session, metadata_connection, current_url)
+                target_works = prompt_exclude_downloaded_works(
+                    metadata_connection,
+                    target_works,
+                )
                 target_works = prompt_excluded_works(current_url, target_works)
                 if not target_works:
                     print("この作者/サークルURLはすべて除外されたため、次へ進みます。\n")

@@ -3,7 +3,7 @@ import os
 import re
 import sys
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -169,7 +169,13 @@ def get_backoff_seconds(attempt: int) -> int:
     return min(wait_seconds, MAX_BACKOFF_SECONDS)
 
 
-def request_with_backoff(session, url: str, description: str, allow_not_found: bool = False):
+def request_with_backoff(
+    session,
+    url: str,
+    description: str,
+    allow_not_found: bool = False,
+    allow_redirects: bool = True,
+):
     attempt = 1
 
     while True:
@@ -177,10 +183,17 @@ def request_with_backoff(session, url: str, description: str, allow_not_found: b
         retry_reason = None
 
         try:
-            response = session.get(url, timeout=TIMEOUT)
+            response = session.get(
+                url,
+                timeout=TIMEOUT,
+                allow_redirects=allow_redirects,
+            )
             status_code = response.status_code
 
             if status_code == 200:
+                return response
+
+            if not allow_redirects and status_code in {301, 302, 303, 307, 308}:
                 return response
 
             if allow_not_found and status_code == 404:
@@ -222,9 +235,27 @@ def fetch_page(session, work_id: int):
         requested_url,
         f"作品ページ取得 ID {work_id}",
         allow_not_found=True,
+        allow_redirects=False,
     )
     if response is None:
         return None, requested_url, None
+
+    if response.status_code in {301, 302, 303, 307, 308}:
+        redirect_url = urljoin(requested_url, response.headers.get("Location", ""))
+        response.close()
+
+        redirect_match = WORK_PATH_PATTERN.search(urlsplit(redirect_url).path)
+        if not redirect_match or int(redirect_match.group(1)) != work_id:
+            return None, requested_url, redirect_url or None
+
+        response = request_with_backoff(
+            session,
+            redirect_url,
+            f"作品ページ取得 ID {work_id}",
+            allow_not_found=True,
+        )
+        if response is None:
+            return None, requested_url, redirect_url
 
     try:
         return decode_response_html(response), requested_url, response.url

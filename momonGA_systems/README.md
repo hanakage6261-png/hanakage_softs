@@ -31,12 +31,14 @@
 ファイル: `momonGA_downloader/momonGA_downloader.py`
 
 - 作品URLを直接入力すると、その作品をダウンロード
-- 作者URL / サークルURLを入力すると、掲載作品を一覧展開してダウンロード候補化
+- 作者URL / サークルURL / 検索結果URLを入力すると、掲載作品を一覧展開してダウンロード候補化
 - 同タイトル候補は「1枚目画像ハッシュ + ページ数」で簡易重複整理
+- `downloaded = 1` の作品が候補にあれば、まとめて除外するか確認
 - 一覧展開後に不要作品の番号除外が可能
 - ダウンロード成功時に `works.downloaded = 1`
 - 出力形式は **CBZのみ**
 - 元の `webp` をそのままZIPへ入れるため、旧PDF方式の再圧縮劣化はない
+- 作者情報がない場合のファイル名は `[] タイトル.cbz`
 
 ### 2. メタデータ巡回
 
@@ -145,11 +147,27 @@ python .\momonGA_downloader\momonGA_downloader.py
 python .\momonGA_searching\momonGA_searching.py
 ```
 
+### URL指定のメタデータ登録
+
+```powershell
+python .\momonGA_searching\momonGA_metadataonly_searching.py
+```
+
+作品URL、作者URL、サークルURL、検索結果URLに対応します。画像やCBZは取得しません。
+
 ### ランダム表示
 
 ```powershell
 python .\momonGA_utilize\random_select.py
 ```
+
+### CBZファイル名から作者名を除去
+
+```powershell
+python .\momonGA_authordata_eliminater.py
+```
+
+`Downloads\momonGA_rename` 内の `[作者] タイトル.cbz` を `[] タイトル.cbz` に変更します。
 
 ### 文字化けメタデータの手動補修
 
@@ -176,11 +194,14 @@ python .\momonGA_legacies\momonGA_pdf_to_cbz_redownload_helper.py
 
 ## 未対応 / 今後の候補
 
-- 検索結果URLからの作品URL抽出
 - Google Keep等からのURL取り込み
 - 重複判定精度の改善
 - 既存CBZの再構築支援
 - DBを利用した高度な検索系スクリプト追加
+- DBファイルの保存先を設定ファイルで変更する機能
+- お気に入りフラグ
+- CBZの実在状態をDBへ同期する `file_present` 管理
+- CBZファイル名へ作品IDを付ける新命名規則
 
 ## 注意点
 
