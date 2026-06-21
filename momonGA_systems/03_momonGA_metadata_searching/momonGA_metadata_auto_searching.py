@@ -19,6 +19,7 @@ from momonGA_registry import load_module
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection
 overwrite_work_metadata = metadata_store.overwrite_work_metadata
+record_metadata_check = metadata_store.record_metadata_check
 upsert_work = metadata_store.upsert_work
 
 
@@ -539,6 +540,7 @@ def main():
                 overwrite_work_metadata(connection, data)
             else:
                 upsert_work(connection, data)
+            record_metadata_check(connection, current_id)
             print_result(data)
 
             current_id += 1

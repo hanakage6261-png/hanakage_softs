@@ -11,6 +11,7 @@ from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection
+record_metadata_check = metadata_store.record_metadata_check
 upsert_work = metadata_store.upsert_work
 
 downloader_module = load_module("downloader_main")
@@ -26,7 +27,7 @@ work_to_db_record = downloader_module.work_to_db_record
 
 def collect_input_urls():
     print("作品URL、作者URL、サークルURL、検索結果URLを入力してください。")
-    print("複数入力できます。空Enterで取得を開始します。")
+    print("複数入力できます。空Enterで入力を終了します。")
     urls = []
 
     while True:
@@ -47,7 +48,7 @@ def expand_metadata_urls(session, input_url: str):
         1,
     ):
         page_urls = extract_work_urls_from_soup(soup, page_url)
-        print(f"一覧ページ {page_number}: 作品URL {len(page_urls)} 件")
+        print(f"ページ {page_number}: 作品URL {len(page_urls)} 件")
         work_urls.extend(page_urls)
 
     return dedupe_urls(work_urls)
@@ -56,13 +57,14 @@ def expand_metadata_urls(session, input_url: str):
 def register_metadata(session, connection, work_url: str):
     work = fetch_work_summary(session, work_url)
     upsert_work(connection, work_to_db_record(work))
+    record_metadata_check(connection, int(work.work_id))
     print(f"登録: mo{work.work_id} | {work.title}")
 
 
 def main():
     input_urls = collect_input_urls()
     if not input_urls:
-        print("URLが入力されていません。")
+        print("URLが入力されませんでした。")
         return
 
     session = create_session()

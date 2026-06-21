@@ -17,6 +17,7 @@ else:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
+get_joined_view_name = metadata_store.get_joined_view_name
 open_metadata_connection = metadata_store.open_metadata_connection
 overwrite_work_metadata = metadata_store.overwrite_work_metadata
 
@@ -29,7 +30,7 @@ print_result = metadata_auto_searching.print_result
 
 def parse_ids(raw_text: str) -> list[int]:
     ids = []
-    for token in re.split(r"[\s,、]+", raw_text.strip()):
+    for token in re.split(r"[\s,]+", raw_text.strip()):
         if not token:
             continue
         if token.lower().startswith("mo"):
@@ -41,10 +42,19 @@ def parse_ids(raw_text: str) -> list[int]:
 
 
 def print_existing_row(connection, work_id: int):
+    view_name = get_joined_view_name()
     row = connection.execute(
-        """
-        SELECT id, title, date, type, pages, status, downloaded, final_url
-        FROM works
+        f"""
+        SELECT
+            id,
+            title,
+            date,
+            type,
+            pages,
+            status,
+            downloaded,
+            final_url
+        FROM {view_name}
         WHERE id = ?
         """,
         (work_id,),
@@ -67,7 +77,7 @@ def print_existing_row(connection, work_id: int):
 
 def repair_id(connection, session, work_id: int):
     print("=" * 60)
-    print(f"再取得ID: {work_id}")
+    print(f"補修対象ID: {work_id}")
     print_existing_row(connection, work_id)
     print("")
 
@@ -77,12 +87,12 @@ def repair_id(connection, session, work_id: int):
 
     print("更新後の取得結果:")
     print_result(data)
-    print("downloaded フラグは既存値を維持しました。")
+    print("downloaded フラグは work_state 側の既存値を維持しました。")
 
 
 def main():
     print("momonGA metadata mistake repair")
-    print("修正したいIDを入力してください。複数IDは空白・カンマ区切りで入力できます。")
+    print("補修したいIDを入力してください。複数IDは空白かカンマ区切りで入力できます。")
     print("空Enterで終了します。")
 
     connection = open_metadata_connection()

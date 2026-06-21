@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import sys
 
 
@@ -11,25 +10,26 @@ if ROOT_DIR not in sys.path:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+get_joined_view_name = metadata_store.get_joined_view_name
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
 def main():
-    raw_bucket = input("ID帯の幅(空Enterで1000): ").strip()
+    raw_bucket = input("ID幅(空Enterで1000): ").strip()
     bucket_size = int(raw_bucket) if raw_bucket.isdigit() and int(raw_bucket) > 0 else 1000
 
-    connection = sqlite3.connect(get_database_path())
-    connection.row_factory = sqlite3.Row
+    connection = open_metadata_connection()
+    view_name = get_joined_view_name()
 
     try:
         rows = connection.execute(
-            """
+            f"""
             SELECT
                 (id / ?) * ? AS bucket_start,
                 COUNT(*) AS total,
                 SUM(CASE WHEN status = 'found' THEN 1 ELSE 0 END) AS found,
                 SUM(CASE WHEN downloaded = 1 THEN 1 ELSE 0 END) AS downloaded
-            FROM works
+            FROM {view_name}
             GROUP BY bucket_start
             ORDER BY bucket_start
             """,

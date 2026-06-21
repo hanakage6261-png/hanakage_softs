@@ -33,6 +33,8 @@ from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection
+fetch_downloaded_ids = metadata_store.fetch_downloaded_ids
+record_download_event = metadata_store.record_download_event
 upsert_work = metadata_store.upsert_work
 
 
@@ -789,12 +791,14 @@ def process_work(session, save_root: str, metadata_connection, work: WorkSummary
 
     with tempfile.TemporaryDirectory(prefix=f"momonGA_{work.work_id}_") as temp_dir:
         images = download_gallery_images(session, work.work_id, work.total_pages, temp_dir)
-        safe_title = sanitize_filename(work.title, work.work_id)
+        safe_title = sanitize_filename(work.title, f"work_{work.work_id}")
         safe_author = sanitize_filename(work.author, "")
-        local_archive = os.path.join(temp_dir, f"{safe_title}.cbz")
+        local_archive = os.path.join(temp_dir, f"{safe_title} {work.work_id}.cbz")
         build_cbz(images, local_archive)
 
-        final_archive = get_unique_path(os.path.join(save_root, f"[{safe_author}] {safe_title}.cbz"))
+        final_archive = get_unique_path(
+            os.path.join(save_root, f"[{safe_author}] {safe_title} {work.work_id}.cbz")
+        )
         try:
             shutil.move(local_archive, final_archive)
         except Exception:
@@ -802,7 +806,8 @@ def process_work(session, save_root: str, metadata_connection, work: WorkSummary
                 os.remove(final_archive)
             raise
 
-    upsert_work(metadata_connection, work_to_db_record(work), downloaded=True)
+    upsert_work(metadata_connection, work_to_db_record(work))
+    record_download_event(metadata_connection, int(work.work_id))
 
     print(f"\n保存先: {final_archive}\n")
 
@@ -943,17 +948,7 @@ def prompt_exclude_downloaded_works(metadata_connection, works):
         return works
 
     work_ids = [int(work.work_id) for work in works]
-    placeholders = ",".join("?" for _ in work_ids)
-    rows = metadata_connection.execute(
-        f"""
-        SELECT id
-        FROM works
-        WHERE downloaded = 1
-          AND id IN ({placeholders})
-        """,
-        work_ids,
-    ).fetchall()
-    downloaded_ids = {int(row["id"]) for row in rows}
+    downloaded_ids = fetch_downloaded_ids(metadata_connection, work_ids)
 
     if not downloaded_ids:
         return works

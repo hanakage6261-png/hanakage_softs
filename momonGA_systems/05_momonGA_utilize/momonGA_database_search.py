@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 import sys
 
 
@@ -12,7 +11,8 @@ if ROOT_DIR not in sys.path:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+get_joined_view_name = metadata_store.get_joined_view_name
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
 SEARCH_COLUMNS = (
@@ -26,6 +26,7 @@ SEARCH_COLUMNS = (
     "content",
     "url",
     "final_url",
+    "current_file_name",
 )
 
 
@@ -47,10 +48,27 @@ def search(connection, keyword: str, limit: int):
     where_clause = " OR ".join(f"{column} LIKE ?" for column in SEARCH_COLUMNS)
     params = [f"%{keyword}%"] * len(SEARCH_COLUMNS)
     params.append(limit)
+    view_name = get_joined_view_name()
     return connection.execute(
         f"""
-        SELECT id, title, date, type, pages, author, circle, status, downloaded, final_url
-        FROM works
+        SELECT
+            id,
+            title,
+            date,
+            type,
+            pages,
+            author,
+            circle,
+            status,
+            downloaded,
+            download_count,
+            file_present,
+            current_file_name,
+            file_count,
+            metadata_check_count,
+            last_metadata_checked_at,
+            final_url
+        FROM {view_name}
         WHERE {where_clause}
         ORDER BY id
         LIMIT ?
@@ -60,8 +78,7 @@ def search(connection, keyword: str, limit: int):
 
 
 def main():
-    connection = sqlite3.connect(get_database_path())
-    connection.row_factory = sqlite3.Row
+    connection = open_metadata_connection()
 
     try:
         keyword = input("検索語: ").strip()
@@ -81,7 +98,16 @@ def main():
             print(f"date/type/pages: {row['date']} / {row['type']} / {row['pages']}")
             print(f"author: {format_list(row['author'])}")
             print(f"circle: {format_list(row['circle'])}")
-            print(f"status/downloaded: {row['status']} / {row['downloaded']}")
+            print(
+                "status/downloaded/file_present: "
+                f"{row['status']} / {row['downloaded']} / {row['file_present']}"
+            )
+            print(
+                "download_count/file_count/check_count: "
+                f"{row['download_count']} / {row['file_count']} / {row['metadata_check_count']}"
+            )
+            print(f"current_file_name: {row['current_file_name']}")
+            print(f"last_metadata_checked_at: {row['last_metadata_checked_at']}")
             print(f"url: {row['final_url']}")
 
     finally:

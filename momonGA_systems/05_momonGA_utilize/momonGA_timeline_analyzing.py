@@ -1,7 +1,6 @@
 import collections
 import os
 import re
-import sqlite3
 import sys
 
 
@@ -13,7 +12,7 @@ if ROOT_DIR not in sys.path:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
 DATE_PATTERN = re.compile(r"(\d{4})\D+(\d{1,2})\D+(\d{1,2})")
@@ -30,8 +29,7 @@ def parse_year_month(date_text):
 
 
 def main():
-    connection = sqlite3.connect(get_database_path())
-    connection.row_factory = sqlite3.Row
+    connection = open_metadata_connection()
     counter = collections.Counter()
     unknown = 0
 

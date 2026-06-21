@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 import sys
 
 
@@ -12,7 +11,8 @@ if ROOT_DIR not in sys.path:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+get_joined_view_name = metadata_store.get_joined_view_name
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
 FIELDS = (
@@ -29,6 +29,12 @@ FIELDS = (
     "final_url",
     "status",
     "downloaded",
+    "download_count",
+    "file_present",
+    "current_file_name",
+    "file_count",
+    "metadata_check_count",
+    "last_metadata_checked_at",
 )
 LIST_FIELDS = {"parody", "circle", "author", "characters", "content"}
 
@@ -46,13 +52,13 @@ def list_length(value):
 
 
 def main():
-    connection = sqlite3.connect(get_database_path())
-    connection.row_factory = sqlite3.Row
+    connection = open_metadata_connection()
+    view_name = get_joined_view_name()
 
     try:
-        total = connection.execute("SELECT COUNT(*) FROM works").fetchone()[0]
+        total = connection.execute(f"SELECT COUNT(*) FROM {view_name}").fetchone()[0]
         found = connection.execute(
-            "SELECT COUNT(*) FROM works WHERE status = 'found'"
+            f"SELECT COUNT(*) FROM {view_name} WHERE status = 'found'"
         ).fetchone()[0]
         print(f"total rows: {total}")
         print(f"found rows: {found}")
@@ -60,21 +66,21 @@ def main():
 
         for field in FIELDS:
             non_empty = connection.execute(
-                f"SELECT COUNT(*) FROM works WHERE {field} IS NOT NULL AND {field} != ''"
+                f"SELECT COUNT(*) FROM {view_name} WHERE {field} IS NOT NULL AND {field} != ''"
             ).fetchone()[0]
             distinct = connection.execute(
-                f"SELECT COUNT(DISTINCT {field}) FROM works WHERE {field} IS NOT NULL AND {field} != ''"
+                f"SELECT COUNT(DISTINCT {field}) FROM {view_name} WHERE {field} IS NOT NULL AND {field} != ''"
             ).fetchone()[0]
 
             if field in LIST_FIELDS:
                 item_count = 0
-                for row in connection.execute(f"SELECT {field} FROM works"):
+                for row in connection.execute(f"SELECT {field} FROM {view_name}"):
                     item_count += list_length(row[field])
                 print(
-                    f"{field:>10}: non_empty={non_empty:>6} distinct_raw={distinct:>6} list_items={item_count:>7}"
+                    f"{field:>24}: non_empty={non_empty:>6} distinct_raw={distinct:>6} list_items={item_count:>7}"
                 )
             else:
-                print(f"{field:>10}: non_empty={non_empty:>6} distinct={distinct:>6}")
+                print(f"{field:>24}: non_empty={non_empty:>6} distinct={distinct:>6}")
 
     finally:
         connection.close()

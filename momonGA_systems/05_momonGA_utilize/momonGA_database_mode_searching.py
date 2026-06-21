@@ -1,7 +1,6 @@
 import collections
 import json
 import os
-import sqlite3
 import sys
 
 
@@ -13,7 +12,7 @@ if ROOT_DIR not in sys.path:
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
 FIELDS = {
@@ -56,8 +55,7 @@ def main():
     raw_limit = input("表示件数(空Enterで30): ").strip()
     limit = int(raw_limit) if raw_limit.isdigit() and int(raw_limit) > 0 else 30
 
-    connection = sqlite3.connect(get_database_path())
-    connection.row_factory = sqlite3.Row
+    connection = open_metadata_connection()
     counter = collections.Counter()
 
     try:

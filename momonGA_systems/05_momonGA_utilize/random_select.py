@@ -1,37 +1,35 @@
-import os
-import sqlite3
 import sys
+from pathlib import Path
 
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(BASE_DIR)
-GRANDPARENT_DIR = os.path.dirname(PARENT_DIR)
-for candidate_dir in (PARENT_DIR, GRANDPARENT_DIR):
-    if candidate_dir not in sys.path:
-        sys.path.insert(0, candidate_dir)
+BASE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BASE_DIR.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from momonGA_registry import load_module
 
 metadata_store = load_module("metadata_store")
-get_database_path = metadata_store.get_database_path
+open_metadata_connection = metadata_store.open_metadata_connection
 
 
-DB_PATH = get_database_path()
+def main():
+    connection = open_metadata_connection()
 
-connection = sqlite3.connect(DB_PATH)
-cursor = connection.cursor()
+    try:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM works
+            WHERE status = 'found'
+            ORDER BY RANDOM()
+            LIMIT 1
+            """
+        ).fetchone()
+        print(tuple(row) if row is not None else None)
+    finally:
+        connection.close()
 
-cursor.execute(
-    """
-    SELECT *
-    FROM works
-    WHERE status = 'found'
-    ORDER BY RANDOM()
-    LIMIT 1
-    """
-)
 
-row = cursor.fetchone()
-print(row)
-
-connection.close()
+if __name__ == "__main__":
+    main()
