@@ -1,20 +1,30 @@
 import os
 import re
 import sys
+from pathlib import Path
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(os.path.dirname(CURRENT_DIR))
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+for candidate_dir in (Path(CURRENT_DIR), *Path(CURRENT_DIR).parents):
+    if (candidate_dir / "momonGA_registry.py").exists():
+        ROOT_DIR = str(candidate_dir)
+        if ROOT_DIR not in sys.path:
+            sys.path.insert(0, ROOT_DIR)
+        break
+else:
+    raise RuntimeError("momonGA_registry.py が見つかりません。")
 
-from momonGA_metadata_store import open_metadata_connection, overwrite_work_metadata
-from momonGA_searching.momonGA_searching import (
-    create_session,
-    fetch_page,
-    parse,
-    print_result,
-)
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+open_metadata_connection = metadata_store.open_metadata_connection
+overwrite_work_metadata = metadata_store.overwrite_work_metadata
+
+metadata_auto_searching = load_module("metadata_auto_searching")
+create_session = metadata_auto_searching.create_session
+fetch_page = metadata_auto_searching.fetch_page
+parse = metadata_auto_searching.parse
+print_result = metadata_auto_searching.print_result
 
 
 def parse_ids(raw_text: str) -> list[int]:
@@ -91,7 +101,15 @@ def main():
                 continue
 
             for work_id in work_ids:
-                repair_id(connection, session, work_id)
+                try:
+                    repair_id(connection, session, work_id)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    print(f"更新失敗: mo{work_id} / {exc}")
+
+    except KeyboardInterrupt:
+        print("\n中断しました。")
 
     finally:
         session.close()

@@ -10,7 +10,10 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from momonGA_metadata_store import get_database_path
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+get_database_path = metadata_store.get_database_path
 
 
 FIELDS = {

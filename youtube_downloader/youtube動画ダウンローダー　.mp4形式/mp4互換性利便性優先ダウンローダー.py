@@ -14,7 +14,7 @@ import yt_dlp
 
 
 BASE_DIR = os.path.join(os.path.expanduser("~"), "Downloads", "mp4_downloader")
-VIDEO_DIR = os.path.join(BASE_DIR, "videos")
+VIDEO_DIR = os.path.join(os.path.expanduser("~"), "Downloads", "youtube_mp4")
 THUMB_DIR = os.path.join(BASE_DIR, "thumbs")
 ARCHIVE_DIR = os.path.join(os.path.expanduser("~"), "Downloads", "MKV_archive_from_youtube")
 PENDING_FILE = os.path.join(BASE_DIR, "pending_urls.json")
@@ -503,12 +503,17 @@ def build_video_rows(info):
     videos.sort(key=video_sort_key, reverse=True)
 
     rows = []
+    seen_codecs = set()
     for number, fmt in enumerate(videos, 1):
+        codec_family = codec_family_from_vcodec(fmt.get("vcodec"))
+        codec_best = codec_family not in seen_codecs
+        seen_codecs.add(codec_family)
         rows.append(
             {
                 "number": number,
                 "format": fmt,
                 "compatible": is_mp4_compatible_video(fmt),
+                "codec_best": codec_best,
             }
         )
     return rows
@@ -741,8 +746,8 @@ def show_combined_table(combined_rows):
 
 def show_stream_table(video_rows, audio_rows, selected_video_row, selected_audio_row):
     print("\n=== VIDEO STREAMS (video only) ===")
-    print("No  FmtID  Res          FPS  Codec   Ext   Bitrate  Size      Compatible  Auto")
-    print("-" * 95)
+    print("No  FmtID  Res          FPS  Codec   Ext   Bitrate  Size      CodecBest  MP4Auto")
+    print("-" * 98)
 
     for row in video_rows:
         fmt = row["format"]
@@ -751,12 +756,12 @@ def show_stream_table(video_rows, audio_rows, selected_video_row, selected_audio
         resolution = f"{width}x{height}" if width and height else "?"
         bitrate = int(fmt.get("tbr") or 0)
         size = format_size(fmt.get("filesize") or fmt.get("filesize_approx"))
-        compatible = "YES" if row["compatible"] else "NO"
+        codec_best = "BEST" if row.get("codec_best") else ""
         auto = "AUTO" if selected_video_row and row["number"] == selected_video_row["number"] else ""
         print(
             f"{row['number']:<3} {str(fmt.get('format_id') or '?'):<6} {resolution:<12} "
             f"{fmt.get('fps') or '?':<4} {simplify_vcodec(fmt.get('vcodec')):<7} "
-            f"{fmt.get('ext') or '?':<5} {bitrate:<7} {size:<8} {compatible:<11} {auto}"
+            f"{fmt.get('ext') or '?':<5} {bitrate:<7} {size:<8} {codec_best:<10} {auto}"
         )
 
     print("\n=== AUDIO STREAMS (audio only) ===")
@@ -898,9 +903,9 @@ $shell = New-Object -ComObject Shell.Application
 foreach ($window in $shell.Windows()) {{
     try {{
         if ($window.Document.Folder.Self.Path -eq $path) {{
-            $window.Document.CurrentViewMode = 8
+            $window.Document.CurrentViewMode = 1
             $window.Document.IconSize = 256
-            try {{ $window.Document.SortColumns = 'prop:System.Size;-' }} catch {{}}
+            try {{ $window.Document.SortColumns = 'prop:-System.Size;' }} catch {{}}
         }}
     }} catch {{}}
 }}
@@ -1142,7 +1147,6 @@ def prepare_job(item, item_index, total_items):
     audio_rows = build_audio_rows(info)
     selected_video_row = choose_auto_video(video_rows)
     selected_audio_row = choose_auto_audio(audio_rows)
-    archive_selection = select_archive_streams(info)
 
     if not selected_video_row:
         print(f"[{item_index}/{total_items}] H.264 / mp4 の動画ストリームが見つかりません。")
@@ -1154,10 +1158,6 @@ def prepare_job(item, item_index, total_items):
         cleanup_folder(thumb_folder)
         return None
 
-    if not archive_selection:
-        print(f"[{item_index}/{total_items}] MKVアーカイブ用のストリームが見つかりません。")
-        cleanup_folder(thumb_folder)
-        return None
 
     print(f"[{item_index}/{total_items}] サムネイルを取得しています...")
     thumbs = download_thumbs(info, thumb_folder)
@@ -1180,10 +1180,35 @@ def prepare_job(item, item_index, total_items):
         "audio_rows": audio_rows,
         "selected_video_row": selected_video_row,
         "selected_audio_row": selected_audio_row,
-        "archive_selection": archive_selection,
         "thumbs": thumbs,
     }
 
+
+
+def choose_manual_archive_streams(job):
+    video_map = {row["number"]: row["format"] for row in job["video_rows"]}
+    audio_map = {row["number"]: row["format"] for row in job["audio_rows"]}
+
+    print("\n=== MKV STREAM SELECTION ===")
+    print("上のVIDEO STREAMSとAUDIO STREAMSのNoを入力してください。")
+    video_number = ask_int("MKV video No: ", video_map.keys())
+    audio_number = ask_int("MKV audio No: ", audio_map.keys())
+
+    selected_video = video_map[video_number]
+    selected_audio = audio_map[audio_number]
+    selection = {
+        "mode": "manual",
+        "format_selector": f"{selected_video['format_id']}+{selected_audio['format_id']}",
+        "video": selected_video,
+        "audio": selected_audio,
+        "combined": None,
+        "video_number": video_number,
+        "audio_number": audio_number,
+    }
+
+    print(f"MKV video: No.{video_number} {describe_video_format(selected_video)}")
+    print(f"MKV audio: No.{audio_number} {describe_audio_format(selected_audio)}")
+    return selection
 
 def show_job_and_choose_thumbnail(job):
     print(f"\n[{job['item_index']}/{job['total_items']}] {job['title']}")
@@ -1202,7 +1227,6 @@ def show_job_and_choose_thumbnail(job):
         f"video No.{job['selected_video_row']['number']} (format_id={selected_video.get('format_id')}) / "
         f"audio No.{job['selected_audio_row']['number']} (format_id={selected_audio.get('format_id')})"
     )
-    show_archive_selection(job.get("archive_selection"))
 
     show_thumbs(job["thumbs"], job["thumb_folder"])
     if open_thumb_folder(job["thumb_folder"]):
@@ -1241,6 +1265,9 @@ def start_job_download(job):
         job["title"],
         cookie_browser=job.get("cookie_browser"),
     )
+    print(f"[{job['item_index']}/{job['total_items']}] H.264 + AAC のMP4ダウンロードを開始しました。")
+
+    job["archive_selection"] = choose_manual_archive_streams(job)
     job["archive_thread"] = start_worker(
         job["archive_result"],
         download_archive_mkv,
@@ -1252,7 +1279,7 @@ def start_job_download(job):
         job["archive_selection"],
         cookie_browser=job.get("cookie_browser"),
     )
-    print(f"[{job['item_index']}/{job['total_items']}] MP4とMKVアーカイブのダウンロードを開始しました。")
+    print(f"[{job['item_index']}/{job['total_items']}] 選択したストリームでMKVダウンロードを開始しました。")
 
 
 def job_is_alive(job):
@@ -1377,6 +1404,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

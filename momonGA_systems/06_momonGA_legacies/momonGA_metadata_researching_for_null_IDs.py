@@ -1,26 +1,33 @@
 import os
 import sys
 import time
+from pathlib import Path
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(CURRENT_DIR)
-if ROOT_DIR not in sys.path:
-    sys.path.insert(0, ROOT_DIR)
+for candidate_dir in (Path(CURRENT_DIR), *Path(CURRENT_DIR).parents):
+    if (candidate_dir / "momonGA_registry.py").exists():
+        ROOT_DIR = str(candidate_dir)
+        if ROOT_DIR not in sys.path:
+            sys.path.insert(0, ROOT_DIR)
+        break
+else:
+    raise RuntimeError("momonGA_registry.py が見つかりません。")
 
-from momonGA_metadata_store import (
-    open_metadata_connection,
-    overwrite_work_metadata,
-    upsert_work,
-)
-from momonGA_searching import (
-    REQUEST_INTERVAL_SECONDS,
-    create_session,
-    fetch_page,
-    load_next_id,
-    parse,
-    print_result,
-)
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+open_metadata_connection = metadata_store.open_metadata_connection
+overwrite_work_metadata = metadata_store.overwrite_work_metadata
+upsert_work = metadata_store.upsert_work
+
+metadata_auto_searching = load_module("metadata_auto_searching")
+REQUEST_INTERVAL_SECONDS = metadata_auto_searching.REQUEST_INTERVAL_SECONDS
+create_session = metadata_auto_searching.create_session
+fetch_page = metadata_auto_searching.fetch_page
+load_next_id = metadata_auto_searching.load_next_id
+parse = metadata_auto_searching.parse
+print_result = metadata_auto_searching.print_result
 
 
 def ask_limit() -> int | None:

@@ -7,17 +7,21 @@ ROOT_DIR = os.path.dirname(CURRENT_DIR)
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from momonGA_metadata_store import open_metadata_connection, upsert_work
-from momonGA_downloader.momonGA_downloader import (
-    create_session,
-    dedupe_urls,
-    extract_work_urls_from_soup,
-    fetch_work_summary,
-    get_url_kind,
-    iter_collection_pages,
-    normalize_url,
-    work_to_db_record,
-)
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+open_metadata_connection = metadata_store.open_metadata_connection
+upsert_work = metadata_store.upsert_work
+
+downloader_module = load_module("downloader_main")
+create_session = downloader_module.create_session
+dedupe_urls = downloader_module.dedupe_urls
+extract_work_urls_from_soup = downloader_module.extract_work_urls_from_soup
+fetch_work_summary = downloader_module.fetch_work_summary
+get_url_kind = downloader_module.get_url_kind
+iter_collection_pages = downloader_module.iter_collection_pages
+normalize_url = downloader_module.normalize_url
+work_to_db_record = downloader_module.work_to_db_record
 
 
 def collect_input_urls():

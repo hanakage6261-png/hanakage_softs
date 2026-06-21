@@ -4,14 +4,22 @@ import shutil
 import sqlite3
 import time
 
+from momonGA_registry import get_directory
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+SYSTEMS_ROOT_DIR = os.path.dirname(PACKAGE_DIR)
 DB_FILE_NAME = "momonGA_metadata.db"
 LEGACY_DB_FILE_NAME = "momon.db"
-DB_PATH = os.path.join(ROOT_DIR, DB_FILE_NAME)
-SEARCH_DIR = os.path.join(ROOT_DIR, "momonGA_searching")
+DB_PATH = os.path.join(PACKAGE_DIR, DB_FILE_NAME)
+SEARCH_DIR = os.fspath(get_directory("metadata_searching"))
 LEGACY_DB_PATHS = [
-    os.path.join(ROOT_DIR, LEGACY_DB_FILE_NAME),
+    os.path.join(PACKAGE_DIR, LEGACY_DB_FILE_NAME),
+    os.path.join(SYSTEMS_ROOT_DIR, DB_FILE_NAME),
+    os.path.join(SYSTEMS_ROOT_DIR, LEGACY_DB_FILE_NAME),
+    os.path.join(SYSTEMS_ROOT_DIR, "momonGA_metadata.db"),
+    os.path.join(SYSTEMS_ROOT_DIR, "momon.db"),
+    os.path.join(SYSTEMS_ROOT_DIR, "momonGA_searching", LEGACY_DB_FILE_NAME),
     os.path.join(SEARCH_DIR, LEGACY_DB_FILE_NAME),
 ]
 DB_BUSY_TIMEOUT_MS = 30000

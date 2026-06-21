@@ -10,7 +10,10 @@ for candidate_dir in (PARENT_DIR, GRANDPARENT_DIR):
     if candidate_dir not in sys.path:
         sys.path.insert(0, candidate_dir)
 
-from momonGA_metadata_store import get_database_path
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+get_database_path = metadata_store.get_database_path
 
 
 DB_PATH = get_database_path()

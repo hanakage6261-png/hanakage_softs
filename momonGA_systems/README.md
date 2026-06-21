@@ -4,31 +4,41 @@
 
 今後フォルダ名を `momonGA_systems` に変更しても、**最上位フォルダ名だけの変更であれば相対パス前提のためそのまま動作します。**
 
+先頭の `01` から `06` の番号は、重要度と使用頻度の順を表します。
+
 ## 構成
 
-- `momonGA_downloader/`
+- `momonGA_registry.py`
+  - 他プログラムが参照するフォルダ名・主要スクリプトの場所を一元管理する
+- `01_momonGA_downloader/`
   - `momonGA_downloader.py`
   - 作品URL / 作者URL / サークルURLから作品を取得して `CBZ` を作る
-- `momonGA_searching/`
-  - `momonGA_searching.py`
+- `02_momonGA_database/`
+  - `momonGA_metadata_store.py`
+  - `momonGA_metadata.db`
+  - 共有DBアクセス層と共有メタデータDB本体
+- `03_momonGA_metadata_searching/`
+  - `momonGA_metadata_auto_searching.py`
   - `mo0`, `mo1`, `mo2`... とIDを順に見てメタデータを収集する
   - `momonGA_searching_state.json`
   - メタデータ巡回の再開位置
-- `momonGA_utilize/`
+- `04_momonGA_patch/`
+  - `momonGA_metadata_manual_searching.py`
+  - `momonGA_authordata_eliminater.py`
+  - 手動補修や例外処理用のプログラム群
+- `05_momonGA_utilize/`
   - `random_select.py`
-  - DBから作品をランダムに表示する補助スクリプト
-- `momonGA_metadata_store.py`
-  - 共有DBアクセス層
-- `momonGA_metadata.db`
-  - 共有メタデータDB本体
-- `momon.db`
-  - 旧DBバックアップ。通常運用では使わない
+  - DB利用スクリプトや補助ユーティリティ
+- `06_momonGA_legacies/`
+  - `momonGA_basis/`
+  - `momonGA_metadata_researching_for_null_IDs.py`
+  - 旧試作物や退役済み補助スクリプトの保管場所
 
 ## 役割
 
 ### 1. ダウンローダー
 
-ファイル: `momonGA_downloader/momonGA_downloader.py`
+ファイル: `01_momonGA_downloader/momonGA_downloader.py`
 
 - 作品URLを直接入力すると、その作品をダウンロード
 - 作者URL / サークルURL / 検索結果URLを入力すると、掲載作品を一覧展開してダウンロード候補化
@@ -42,18 +52,18 @@
 
 ### 2. メタデータ巡回
 
-ファイル: `momonGA_searching/momonGA_searching.py`
+ファイル: `03_momonGA_metadata_searching/momonGA_metadata_auto_searching.py`
 
 - `mo<ID>` を順番に取得してメタデータをDBへ入れる
 - `fanzine` で叩いても `magazine` へリダイレクトされたら同一ID作品として扱う
 - DBに正常データが既にあるIDはまとめてスキップ
 - 文字化けや不完全データらしき既存レコードは再取得対象に戻す
-- 再開位置は `momonGA_searching_state.json` で管理
+- 再開位置は `03_momonGA_metadata_searching/momonGA_searching_state.json` で管理
 - DBの最大IDには依存しない
 
 ### 3. 共有DB
 
-ファイル: `momonGA_metadata.db`
+ファイル: `02_momonGA_database/momonGA_metadata.db`
 
 テーブル: `works`
 
@@ -85,7 +95,7 @@
 
 ### ダウンローダー
 
-- 再開ファイル: `momonGA_downloader/momonGA_downloader_resume.json`
+- 再開ファイル: `01_momonGA_downloader/momonGA_downloader_resume.json`
 - 再開単位は作品URLキュー
 - 作者URL / サークルURLは一度作品URL群へ展開してからキュー化
 - 途中中断時は未完了作品URLから再開
@@ -93,7 +103,7 @@
 
 ### メタデータ巡回
 
-- 再開ファイル: `momonGA_searching/momonGA_searching_state.json`
+- 再開ファイル: `03_momonGA_metadata_searching/momonGA_searching_state.json`
 - `next_id` を保持
 - `KeyboardInterrupt` や進行中例外でも次回位置を残す
 - 進捗ファイル保存で一時ロックが起きても数回リトライする
@@ -129,7 +139,7 @@
 
 ## DB競合対策
 
-- `momonGA_metadata_store.py` 側で `PRAGMA journal_mode = WAL`
+- `02_momonGA_database/momonGA_metadata_store.py` 側で `PRAGMA journal_mode = WAL`
 - `busy_timeout` を設定
 - `database is locked` は短時間待機して複数回リトライ
 
@@ -138,19 +148,19 @@
 ### ダウンローダー
 
 ```powershell
-python .\momonGA_downloader\momonGA_downloader.py
+python .\01_momonGA_downloader\momonGA_downloader.py
 ```
 
 ### メタデータ巡回
 
 ```powershell
-python .\momonGA_searching\momonGA_searching.py
+python .\03_momonGA_metadata_searching\momonGA_metadata_auto_searching.py
 ```
 
 ### URL指定のメタデータ登録
 
 ```powershell
-python .\momonGA_searching\momonGA_metadataonly_searching.py
+python .\04_momonGA_patch\momonGA_metadata_manual_searching.py
 ```
 
 作品URL、作者URL、サークルURL、検索結果URLに対応します。画像やCBZは取得しません。
@@ -158,13 +168,13 @@ python .\momonGA_searching\momonGA_metadataonly_searching.py
 ### ランダム表示
 
 ```powershell
-python .\momonGA_utilize\random_select.py
+python .\05_momonGA_utilize\random_select.py
 ```
 
 ### CBZファイル名から作者名を除去
 
 ```powershell
-python .\momonGA_authordata_eliminater.py
+python .\04_momonGA_patch\momonGA_authordata_eliminater.py
 ```
 
 `Downloads\momonGA_rename` 内の `[作者] タイトル.cbz` を `[] タイトル.cbz` に変更します。
@@ -172,25 +182,32 @@ python .\momonGA_authordata_eliminater.py
 ### 文字化けメタデータの手動補修
 
 ```powershell
-python .\momonGA_legacies\momonGA_searching_legacies\momonGA_researching_for_mistakes.py
+python .\06_momonGA_legacies\momonGA_basis\momonGA_searching_legacies\momonGA_researching_for_mistakes.py
 ```
 
 ### 旧PDFからCBZ再ダウンロード用URLを復旧
 
 ```powershell
-python .\momonGA_legacies\momonGA_pdf_to_cbz_redownload_helper.py --enqueue-only
+python .\06_momonGA_legacies\momonGA_basis\momonGA_pdf_to_cbz_redownload_helper.py --enqueue-only
 ```
 
 ```powershell
-python .\momonGA_legacies\momonGA_pdf_to_cbz_redownload_helper.py
+python .\06_momonGA_legacies\momonGA_basis\momonGA_pdf_to_cbz_redownload_helper.py
+```
+
+### not found ID の再調査
+
+```powershell
+python .\06_momonGA_legacies\momonGA_metadata_researching_for_null_IDs.py
 ```
 
 ## 運用メモ
 
-- `momonGA_downloader` と `momonGA_systems` のような複製フォルダを並行運用すると正本が曖昧になりやすい
+- `momonGA_registry.py` で主要フォルダ名と依存スクリプトの場所を一元管理している
+- `01_momonGA_downloader` と `momonGA_systems` のような複製フォルダを並行運用すると正本が曖昧になりやすい
 - 正本は1つに決めること
 - 最上位フォルダ名だけ変えるのは問題ない
-- 旧 `momon.db` はバックアップ扱いで、実運用は `momonGA_metadata.db`
+- 旧 `momon.db` はバックアップ扱いで、実運用は `02_momonGA_database/momonGA_metadata.db`
 
 ## 未対応 / 今後の候補
 

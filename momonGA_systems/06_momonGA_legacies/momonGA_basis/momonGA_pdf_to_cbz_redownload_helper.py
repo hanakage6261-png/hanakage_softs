@@ -15,19 +15,28 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 CURRENT_DIR = Path(__file__).resolve().parent
-ROOT_DIR = CURRENT_DIR.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
+    if (candidate_dir / "momonGA_registry.py").exists():
+        ROOT_DIR = candidate_dir
+        if str(ROOT_DIR) not in sys.path:
+            sys.path.insert(0, str(ROOT_DIR))
+        break
+else:
+    raise RuntimeError("momonGA_registry.py が見つかりません。")
 
-from momonGA_metadata_store import get_database_path, open_metadata_connection
-from momonGA_downloader.momonGA_downloader import (
-    create_session,
-    dedupe_urls,
-    process_input_queue,
-    resolve_download_targets,
-    save_resume_state,
-    select_save_location,
-)
+from momonGA_registry import load_module
+
+metadata_store = load_module("metadata_store")
+get_database_path = metadata_store.get_database_path
+open_metadata_connection = metadata_store.open_metadata_connection
+
+downloader_module = load_module("downloader_main")
+create_session = downloader_module.create_session
+dedupe_urls = downloader_module.dedupe_urls
+process_input_queue = downloader_module.process_input_queue
+resolve_download_targets = downloader_module.resolve_download_targets
+save_resume_state = downloader_module.save_resume_state
+select_save_location = downloader_module.select_save_location
 
 
 PDF_NAME_PATTERN = re.compile(r"^\[(?P<author>.+?)\]\s*(?P<title>.+?)\.pdf$", re.IGNORECASE)

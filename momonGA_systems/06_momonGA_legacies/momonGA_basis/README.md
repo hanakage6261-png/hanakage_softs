@@ -1,6 +1,6 @@
-# momonGA legacies
+# momonGA basis
 
-このフォルダは、通常運用の本体ではない補助スクリプトや旧試作物を置く場所です。
+このフォルダは、`momonGA_systems` を組み立てる上で基礎になった補助スクリプト、移行支援ツール、旧試作物を置くアーカイブです。
 
 ## Files
 
@@ -18,13 +18,13 @@
 ## Usage
 
 ```powershell
-python .\momonGA_legacies\momonGA_searching_legacies\momonGA_researching_for_mistakes.py
+python .\06_momonGA_legacies\momonGA_basis\momonGA_searching_legacies\momonGA_researching_for_mistakes.py
 ```
 
 ```powershell
-python .\momonGA_legacies\momonGA_pdf_to_cbz_redownload_helper.py --enqueue-only
+python .\06_momonGA_legacies\momonGA_basis\momonGA_pdf_to_cbz_redownload_helper.py --enqueue-only
 ```
 
 ```powershell
-python .\momonGA_legacies\momonGA_pdf_to_cbz_redownload_helper.py
+python .\06_momonGA_legacies\momonGA_basis\momonGA_pdf_to_cbz_redownload_helper.py
 ```
