@@ -1,15 +1,13 @@
 # momonGA Systems
 
-この `README.md` は入口です。実運用用の説明は `00_momonGA_master/README.md` に集約しました。
+この `README.md` は、`momonGA_systems` 全体の入口です。  
+実運用の説明は `00_momonGA_master/README.md`、全体仕様は `00_momonGA_master/PROJECT_CONTEXT.md` に集約します。
 
-- `README.md`
-  - 使い始めるための入口
-  - 主要ドキュメントの場所案内
-- `PROJECT_CONTEXT.md`
-  - システム全体の仕様と依存関係の案内
-  - 実体は `00_momonGA_master/PROJECT_CONTEXT.md`
+番号付きフォルダの直下には、`01_momonGA_downloader_README.md` のような  
+`_README.md` を置き、そのフォルダの役割と収納物を説明するものとします。  
+書式見本は [README_style_model.md](./README_style_model.md) に置きます。
 
-トップレベルの基本構成:
+## トップレベル構成
 
 - `00_momonGA_master`
 - `01_momonGA_downloader`
@@ -18,3 +16,4 @@
 - `04_momonGA_patch`
 - `05_momonGA_utilize`
 - `06_momonGA_legacies`
+- `07_momonGA_systems_projects`
