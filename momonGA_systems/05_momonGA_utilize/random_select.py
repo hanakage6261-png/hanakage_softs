@@ -3,9 +3,15 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BASE_DIR.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+for candidate_dir in (BASE_DIR, *BASE_DIR.parents):
+    registry_dir = candidate_dir / "00_momonGA_master"
+    registry_path = registry_dir / "momonGA_registry.py"
+    if registry_path.exists():
+        if str(registry_dir) not in sys.path:
+            sys.path.insert(0, str(registry_dir))
+        break
+else:
+    raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
 from momonGA_registry import load_module
 

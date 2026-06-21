@@ -1,27 +1,24 @@
 # 00_momonGA_master フォルダについて
 
-このフォルダは、`momonGA_systems` 全体を運用する上での基準点となるファイルを置くためのフォルダです。
+このフォルダは、`momonGA_systems` 全体に関する基幹ファイルを管理するためのフォルダです。
+
+`00` は広い意味での「全体統括」を担当します。  
+そのため、実際の制御ファイル、設定ファイル、全体文書をこのフォルダ内で分けて管理します。
 
 ## 収納物
 
 - [momonGA_registry.py](./momonGA_registry.py)
 
-  各番号付きフォルダや主要スクリプトの参照先を一元管理するファイルです。
+  各番号付きフォルダや主要スクリプトの参照先を一元管理するレジストリです。
 
 ---
 
-- [momonGA_file_status_checker_paths.json](./momonGA_file_status_checker_paths.json)
+- [config](./config/)
 
-  `momonGA_file_status_checker.py` が走査する絶対パスを設定するファイルです。
-
----
-
-- [README.md](./README.md)
-
-  `momonGA_systems` 全体の運用入口として使う説明書です。
+  全体設定用の JSON などを置くサブフォルダです。
 
 ---
 
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md)
+- [docs](./docs/)
 
-  システム全体の仕組み、DB設計、更新責務、移動注意点を説明する仕様書です。
+  システム全体の設計書、説明書、書式見本を置くサブフォルダです。

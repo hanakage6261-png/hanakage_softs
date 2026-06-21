@@ -20,4 +20,4 @@
 ## 注意
 
 ここは原型アーカイブなので、現行仕様の正本として扱わないでください。  
-運用仕様は `00_momonGA_master/PROJECT_CONTEXT.md` を参照します。
+運用仕様は `00_momonGA_master/docs/PROJECT_CONTEXT.md` を参照します。

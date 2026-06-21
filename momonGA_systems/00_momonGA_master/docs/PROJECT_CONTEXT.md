@@ -3,11 +3,11 @@
 ## この文書の役割
 
 このファイルは `momonGA_systems` 全体の仕様書です。  
-`README.md` が運用入口、`PROJECT_CONTEXT.md` が全体仕様と責務整理、という役割です。
+ルートの `README.md` は入口だけを担当し、全体仕様はこの文書に集約します。
 
 各番号付きフォルダの直下には、`01_momonGA_downloader_README.md` のような  
 `_README.md` を置き、そのフォルダの役割と収納物を説明する方針です。  
-書式見本は `README_style_model.md` で管理します。
+書式見本は `00_momonGA_master/docs/README_style_model.md` で管理します。
 
 ## システム全体
 
@@ -26,15 +26,27 @@
 ## 依存の基準点
 
 全スクリプトの共通参照起点は `00_momonGA_master/momonGA_registry.py` です。  
-ルートの `momonGA_registry.py` は互換用の入口で、実体は `00_momonGA_master` にあります。
+今後、場所参照は原則としてこのレジストリ経由に寄せます。
+
+## 00 の考え方
+
+`00_momonGA_master` は「全体に関するもの」を置くフォルダです。  
+ただし中で役割を分けます。
+
+- `momonGA_registry.py`
+  - 実際の制御用レジストリ
+- `config/`
+  - JSON など設定
+- `docs/`
+  - 設計書、説明書、書式見本
 
 ## フォルダ責務
 
 ### `00_momonGA_master`
 
 - レジストリ
-- 全体説明文書
-- 共通設定
+- 全体設定
+- 全体文書
 
 ### `01_momonGA_downloader`
 
@@ -62,7 +74,6 @@
 
 - `momonGA_metadata_manual_searching.py`
   - URL指定でメタデータ登録
-  - 成功時に `metadata_check_count` / `last_metadata_checked_at` を更新
 - `momonGA_authordata_eliminater.py`
   - 例外的なファイル名修正
 - `momonGA_pdf_to_cbz_redownload_helper.py`

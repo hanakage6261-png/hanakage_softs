@@ -27,25 +27,13 @@
 
 ---
 
-- [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md)
+- [config](./config/)
 
-  システム全体の仕様と責務分担をまとめた文書です。
+  全体設定用の JSON などを置くサブフォルダです。
 
 ---
 
-- [README.md](./README.md)
+- [docs](./docs/)
 
-  このフォルダの運用入口となる説明書です。
+  設計書、説明書、書式見本を置くサブフォルダです。
 ```
-
-## リンクの書き方
-
-- 同じフォルダ内のファイル
-  - `[momonGA_downloader.py](./momonGA_downloader.py)`
-- 同じフォルダ内のサブフォルダ
-  - `[momonGA_basis](./momonGA_basis/)`
-
-## 補足
-
-番号付きフォルダの直下にある `_README.md` は、  
-そのフォルダの役割と収納物を説明するためのファイルとして扱います。

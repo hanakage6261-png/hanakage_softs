@@ -2,8 +2,22 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import time
 from datetime import datetime
+from pathlib import Path
+
+
+CURRENT_DIR = Path(__file__).resolve().parent
+for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
+    registry_dir = candidate_dir / "00_momonGA_master"
+    registry_path = registry_dir / "momonGA_registry.py"
+    if registry_path.exists():
+        if str(registry_dir) not in sys.path:
+            sys.path.insert(0, str(registry_dir))
+        break
+else:
+    raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
 from momonGA_registry import get_directory
 

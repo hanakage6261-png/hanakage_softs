@@ -7,6 +7,8 @@ from pathlib import Path
 
 MASTER_DIR = Path(__file__).resolve().parent
 ROOT_DIR = MASTER_DIR.parent
+CONFIG_DIR = MASTER_DIR / "config"
+DOCS_DIR = MASTER_DIR / "docs"
 
 DIRECTORY_NAMES = {
     "downloader": "01_momonGA_downloader",
@@ -50,6 +52,22 @@ def get_master_dir() -> Path:
 
 def get_master_file(name: str) -> Path:
     return MASTER_DIR / name
+
+
+def get_config_dir() -> Path:
+    return CONFIG_DIR
+
+
+def get_config_file(name: str) -> Path:
+    return CONFIG_DIR / name
+
+
+def get_docs_dir() -> Path:
+    return DOCS_DIR
+
+
+def get_docs_file(name: str) -> Path:
+    return DOCS_DIR / name
 
 
 def get_module_path(alias: str) -> Path:

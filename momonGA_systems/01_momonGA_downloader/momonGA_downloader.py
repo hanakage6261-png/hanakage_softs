@@ -21,13 +21,14 @@ from PIL import Image
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 for candidate_dir in (Path(CURRENT_DIR), *Path(CURRENT_DIR).parents):
-    if (candidate_dir / "momonGA_registry.py").exists():
-        ROOT_DIR = str(candidate_dir)
-        if ROOT_DIR not in sys.path:
-            sys.path.insert(0, ROOT_DIR)
+    registry_dir = candidate_dir / "00_momonGA_master"
+    registry_path = registry_dir / "momonGA_registry.py"
+    if registry_path.exists():
+        if str(registry_dir) not in sys.path:
+            sys.path.insert(0, str(registry_dir))
         break
 else:
-    raise RuntimeError("momonGA_registry.py が見つかりません。")
+    raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
 from momonGA_registry import load_module
 

@@ -8,15 +8,16 @@ from pathlib import Path
 
 CURRENT_DIR = Path(__file__).resolve().parent
 for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
-    if (candidate_dir / "momonGA_registry.py").exists():
-        ROOT_DIR = candidate_dir
-        if str(ROOT_DIR) not in sys.path:
-            sys.path.insert(0, str(ROOT_DIR))
+    registry_dir = candidate_dir / "00_momonGA_master"
+    registry_path = registry_dir / "momonGA_registry.py"
+    if registry_path.exists():
+        if str(registry_dir) not in sys.path:
+            sys.path.insert(0, str(registry_dir))
         break
 else:
-    raise RuntimeError("momonGA_registry.py が見つかりません。")
+    raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
-from momonGA_registry import get_master_file, load_module
+from momonGA_registry import get_config_file, load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection
@@ -24,7 +25,7 @@ reset_all_file_statuses = metadata_store.reset_all_file_statuses
 update_file_status = metadata_store.update_file_status
 
 
-CONFIG_PATH = get_master_file("momonGA_file_status_checker_paths.json")
+CONFIG_PATH = get_config_file("momonGA_file_status_checker_paths.json")
 CBZ_SUFFIX = ".cbz"
 WORK_ID_PATTERN = re.compile(r"(?P<id>\d+)(?: \(\d+\))?$")
 
