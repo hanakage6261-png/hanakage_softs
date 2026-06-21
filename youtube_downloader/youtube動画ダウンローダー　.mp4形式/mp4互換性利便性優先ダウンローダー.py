@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -725,9 +726,9 @@ def show_combined_table(combined_rows):
     if not combined_rows:
         return
 
-    print("\n=== COMBINED STREAMS (video+audio) ===")
-    print("No  FmtID  Res          FPS  VCodec  ACodec  Ext   Bitrate  Size")
-    print("-" * 84)
+    print("\n=== MUXED STREAMS ===")
+    print("No  ID     Resolution   FPS  Video   Audio   Bitrate")
+    print("-" * 62)
 
     for row in combined_rows:
         fmt = row["format"]
@@ -735,51 +736,47 @@ def show_combined_table(combined_rows):
         height = fmt.get("height")
         resolution = f"{width}x{height}" if width and height else "?"
         bitrate = int(fmt.get("tbr") or 0)
-        size = format_size(fmt.get("filesize") or fmt.get("filesize_approx"))
         print(
             f"{row['number']:<3} {str(fmt.get('format_id') or '?'):<6} {resolution:<12} "
             f"{fmt.get('fps') or '?':<4} {simplify_vcodec(fmt.get('vcodec')):<7} "
-            f"{simplify_acodec(fmt.get('acodec')):<7} {fmt.get('ext') or '?':<5} "
-            f"{bitrate:<7} {size}"
+            f"{simplify_acodec(fmt.get('acodec')):<7} {bitrate}k"
         )
 
-
 def show_stream_table(video_rows, audio_rows, selected_video_row, selected_audio_row):
-    print("\n=== VIDEO STREAMS (video only) ===")
-    print("No  FmtID  Res          FPS  Codec   Ext   Bitrate  Size      CodecBest  MP4Auto")
-    print("-" * 98)
+    print("\n=== VIDEO-ONLY STREAMS ===")
+    print("No  ID     Resolution   FPS  Codec   Bitrate  Mark")
+    print("-" * 61)
 
     for row in video_rows:
         fmt = row["format"]
         width = fmt.get("width")
         height = fmt.get("height")
         resolution = f"{width}x{height}" if width and height else "?"
-        bitrate = int(fmt.get("tbr") or 0)
-        size = format_size(fmt.get("filesize") or fmt.get("filesize_approx"))
-        codec_best = "BEST" if row.get("codec_best") else ""
-        auto = "AUTO" if selected_video_row and row["number"] == selected_video_row["number"] else ""
+        bitrate = int(fmt.get("tbr") or fmt.get("vbr") or 0)
+        marks = []
+        if row.get("codec_best"):
+            marks.append("codec-best")
+        if selected_video_row and row["number"] == selected_video_row["number"]:
+            marks.append("MP4-auto")
         print(
             f"{row['number']:<3} {str(fmt.get('format_id') or '?'):<6} {resolution:<12} "
             f"{fmt.get('fps') or '?':<4} {simplify_vcodec(fmt.get('vcodec')):<7} "
-            f"{fmt.get('ext') or '?':<5} {bitrate:<7} {size:<8} {codec_best:<10} {auto}"
+            f"{bitrate:<7} {'/'.join(marks)}"
         )
 
-    print("\n=== AUDIO STREAMS (audio only) ===")
-    print("No  FmtID  Bitrate  Hz     Ch  Codec  Ext   Size      Compatible  Auto")
-    print("-" * 89)
+    print("\n=== AUDIO-ONLY STREAMS ===")
+    print("No  ID     Codec   Bitrate  Hz     Ch  Mark")
+    print("-" * 54)
 
     for row in audio_rows:
         fmt = row["format"]
-        size = format_size(fmt.get("filesize") or fmt.get("filesize_approx"))
-        compatible = "YES" if row["compatible"] else "NO"
-        auto = "AUTO" if selected_audio_row and row["number"] == selected_audio_row["number"] else ""
+        bitrate = int(fmt.get("abr") or fmt.get("tbr") or 0)
+        mark = "MP4-auto" if selected_audio_row and row["number"] == selected_audio_row["number"] else ""
         print(
-            f"{row['number']:<3} {str(fmt.get('format_id') or '?'):<6} {int(fmt.get('abr') or 0):<7} "
-            f"{fmt.get('asr') or '?':<6} {fmt.get('audio_channels') or '?':<3} "
-            f"{simplify_acodec(fmt.get('acodec')):<6} {fmt.get('ext') or '?':<5} "
-            f"{size:<8} {compatible:<11} {auto}"
+            f"{row['number']:<3} {str(fmt.get('format_id') or '?'):<6} "
+            f"{simplify_acodec(fmt.get('acodec')):<7} {bitrate:<7} "
+            f"{fmt.get('asr') or '?':<6} {fmt.get('audio_channels') or '?':<3} {mark}"
         )
-
 
 def get_thumb_ext(url):
     ext = url.split("?")[0].split(".")[-1].lower()
@@ -938,31 +935,110 @@ def convert_to_jpg(path):
     return out
 
 
+def canonical_video_url(info):
+    video_id = info.get("id")
+    if video_id:
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return info.get("webpage_url") or info.get("original_url") or ""
+
+
+def list_text(value):
+    if not value:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(str(item) for item in value if item not in (None, ""))
+    return str(value)
+
+
+def archive_metadata_snapshot(info, archive_selection):
+    sanitized = yt_dlp.YoutubeDL.sanitize_info(info)
+    sanitized["archive"] = {
+        "downloaded_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "canonical_video_url": canonical_video_url(info),
+        "selected_mode": archive_selection.get("mode") if archive_selection else None,
+        "selected_format": archive_selection.get("format_selector") if archive_selection else None,
+        "selected_video": archive_selection.get("video") if archive_selection else None,
+        "selected_audio": archive_selection.get("audio") if archive_selection else None,
+        "selected_combined": archive_selection.get("combined") if archive_selection else None,
+    }
+    return yt_dlp.YoutubeDL.sanitize_info(sanitized)
+
+
 def metadata_args(info):
-    date = format_date(info.get("upload_date"))
+    upload_date = info.get("upload_date") or ""
+    formatted_date = format_date(upload_date)
+    downloaded_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    canonical_url = canonical_video_url(info)
+    subtitle_languages = sorted((info.get("subtitles") or {}).keys())
+    automatic_caption_languages = sorted((info.get("automatic_captions") or {}).keys())
+    chapters = info.get("chapters") or []
+
     pairs = {
         "title": info.get("title", ""),
-        "artist": info.get("uploader", ""),
-        "album_artist": info.get("channel", "") or info.get("uploader", ""),
-        "date": date,
-        "comment": info.get("webpage_url", ""),
+        "artist": info.get("channel") or info.get("uploader") or "",
+        "author": info.get("channel") or info.get("uploader") or "",
+        "creator": info.get("channel") or info.get("uploader") or "",
+        "album_artist": info.get("channel") or info.get("uploader") or "",
+        "date": formatted_date,
         "description": info.get("description", ""),
-        "purl": info.get("webpage_url", ""),
         "synopsis": info.get("description", ""),
+        "comment": canonical_url,
+        "purl": canonical_url,
         "encoder": "yt-dlp + ffmpeg",
         "youtube_id": info.get("id", ""),
+        "canonical_url": canonical_url,
+        "channel": info.get("channel", ""),
         "channel_id": info.get("channel_id", ""),
         "channel_url": info.get("channel_url", ""),
-        "upload_date": info.get("upload_date", ""),
-        "age_limit": str(info.get("age_limit", "")),
+        "uploader": info.get("uploader", ""),
+        "uploader_id": info.get("uploader_id", ""),
+        "upload_date": upload_date,
+        "upload_date_display": upload_date[:4] + "/" + upload_date[4:6] + "/" + upload_date[6:8] if len(upload_date) == 8 else upload_date,
+        "release_date": info.get("release_date", ""),
+        "downloaded_at": downloaded_at,
+        "duration_seconds": info.get("duration", ""),
+        "age_limit": info.get("age_limit", ""),
+        "availability": info.get("availability", ""),
+        "license": info.get("license", ""),
+        "language": info.get("language", ""),
+        "tags": list_text(info.get("tags")),
+        "categories": list_text(info.get("categories")),
+        "genres": list_text(info.get("genres")),
+        "track": info.get("track", ""),
+        "track_number": info.get("track_number", ""),
+        "artists": list_text(info.get("artists") or info.get("creators")),
+        "album": info.get("album", ""),
+        "release_year": info.get("release_year", ""),
+        "chapter_count": len(chapters),
+        "subtitle_languages": list_text(subtitle_languages),
+        "automatic_caption_languages": list_text(automatic_caption_languages),
+        "view_count_at_download": info.get("view_count", ""),
+        "like_count_at_download": info.get("like_count", ""),
+        "comment_count_at_download": info.get("comment_count", ""),
     }
 
     args = []
     for key, value in pairs.items():
-        if value:
-            args.extend(["-metadata", f"{key}={str(value)[:4000]}"])
+        if value in (None, ""):
+            continue
+        text = str(value).replace("\0", "")
+        limit = 4000 if key in {"description", "synopsis"} else 1200
+        args.extend(["-metadata", f"{key}={text[:limit]}"])
     return args
 
+def mp4_metadata_args(info):
+    pairs = {
+        "title": info.get("title", ""),
+        "artist": info.get("uploader", ""),
+        "date": format_date(info.get("upload_date")),
+        "comment": canonical_video_url(info),
+    }
+
+    args = []
+    for key, value in pairs.items():
+        if value not in (None, ""):
+            args.extend(["-metadata", f"{key}={str(value)[:1200]}"])
+    return args
 
 def download_mp4(url, video_format_id, audio_format_id, title, cookie_browser=None):
     outtmpl = os.path.join(VIDEO_DIR, f"{title}.mp4")
@@ -1004,7 +1080,7 @@ def embed_thumb_mp4(mp4_path, jpg_path, info):
         "copy",
         "-disposition:v:1",
         "attached_pic",
-        *metadata_args(info),
+        *mp4_metadata_args(info),
         temp,
     ]
 
@@ -1033,36 +1109,68 @@ def find_mkv_file(folder, title):
     return mkv_files[0]
 
 
-def remux_mkv_metadata(mkv_path, jpg_path, info):
+def remux_mkv_metadata(mkv_path, jpg_path, info, archive_selection):
     temp = mkv_path + ".tmp.mkv"
-    cmd = [
-        FFMPEG_PATH,
-        "-y",
-        "-i",
-        mkv_path,
-        "-map",
-        "0",
-        "-c",
-        "copy",
-        "-attach",
-        jpg_path,
-        "-metadata:s:t",
-        "mimetype=image/jpeg",
-        "-metadata:s:t",
-        "filename=cover.jpg",
-        *metadata_args(info),
-        temp,
-    ]
+    metadata_json_path = None
 
-    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if result.returncode != 0 or not os.path.exists(temp):
-        return False
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="youtube_metadata_",
+            delete=False,
+        ) as file_obj:
+            json.dump(
+                archive_metadata_snapshot(info, archive_selection),
+                file_obj,
+                ensure_ascii=False,
+                indent=2,
+            )
+            metadata_json_path = file_obj.name
 
-    os.replace(temp, mkv_path)
-    return True
+        cmd = [
+            FFMPEG_PATH,
+            "-y",
+            "-i",
+            mkv_path,
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-attach",
+            jpg_path,
+            "-metadata:s:t",
+            "mimetype=image/jpeg",
+            "-metadata:s:t",
+            "filename=cover.jpg",
+            "-attach",
+            metadata_json_path,
+            "-metadata:s:t:1",
+            "mimetype=application/json",
+            "-metadata:s:t:1",
+            "filename=youtube_metadata.json",
+            *metadata_args(info),
+            temp,
+        ]
 
+        result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode != 0 or not os.path.exists(temp):
+            return False
 
-
+        os.replace(temp, mkv_path)
+        return True
+    finally:
+        if metadata_json_path:
+            try:
+                os.remove(metadata_json_path)
+            except OSError:
+                pass
+        if os.path.exists(temp):
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
 
 def cleanup_archive_sidecars(archive_folder):
     if not os.path.isdir(archive_folder):
@@ -1085,6 +1193,11 @@ def download_archive_mkv(url, title, info, jpg_path, archive_folder, archive_sel
     shutil.copy2(jpg_path, cover_path)
 
     outtmpl = os.path.join(archive_folder, f"{title}.%(ext)s")
+    postprocessors = [
+        {"key": "FFmpegVideoRemuxer", "preferedformat": "mkv"},
+        {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False},
+        {"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True, "add_infojson": False},
+    ]
     ydl_opts = base_ydl_opts(
         format=archive_selection["format_selector"],
         outtmpl=outtmpl,
@@ -1092,6 +1205,10 @@ def download_archive_mkv(url, title, info, jpg_path, archive_folder, archive_sel
         noplaylist=True,
         concurrent_fragment_downloads=FRAGMENT_DOWNLOADS,
         keepvideo=KEEP_ARCHIVE_RAW_STREAMS,
+        writesubtitles=True,
+        writeautomaticsub=True,
+        subtitleslangs=["all", "-live_chat"],
+        postprocessors=postprocessors,
     )
     ydl_opts = add_cookie_option(ydl_opts, cookie_browser)
 
@@ -1101,10 +1218,10 @@ def download_archive_mkv(url, title, info, jpg_path, archive_folder, archive_sel
     mkv_path = find_mkv_file(archive_folder, title)
     if not mkv_path:
         return None
-    remux_mkv_metadata(mkv_path, cover_path, info)
+    if not remux_mkv_metadata(mkv_path, cover_path, info, archive_selection):
+        return None
     cleanup_archive_sidecars(archive_folder)
     return mkv_path
-
 
 def start_worker(result_box, func, *args, **kwargs):
     def worker():
@@ -1188,16 +1305,45 @@ def prepare_job(item, item_index, total_items):
 def choose_manual_archive_streams(job):
     video_map = {row["number"]: row["format"] for row in job["video_rows"]}
     audio_map = {row["number"]: row["format"] for row in job["audio_rows"]}
+    muxed_map = {row["number"]: row["format"] for row in job["combined_rows"]}
 
-    print("\n=== MKV STREAM SELECTION ===")
-    print("上のVIDEO STREAMSとAUDIO STREAMSのNoを入力してください。")
+    print("\n=== MKV MODE ===")
+    print("0: MKVを作らない")
+    print("1: VIDEO-ONLY + AUDIO-ONLYを自由に組み合わせる")
+    print("2: MUXEDストリームをそのままMKVへ収納する")
+    mode = ask_int("MKV mode: ", {0, 1, 2})
+
+    if mode == 0:
+        return None
+
+    if mode == 2:
+        if not muxed_map:
+            print("MUXEDストリームがないため、個別選択へ切り替えます。")
+            mode = 1
+        else:
+            muxed_number = ask_int("MKV muxed No: ", muxed_map.keys())
+            selected_muxed = muxed_map[muxed_number]
+            print(
+                f"MKV muxed: No.{muxed_number} "
+                f"{describe_video_format(selected_muxed)} / {describe_audio_format(selected_muxed)}"
+            )
+            return {
+                "mode": "muxed",
+                "format_selector": str(selected_muxed["format_id"]),
+                "video": None,
+                "audio": None,
+                "combined": selected_muxed,
+                "muxed_number": muxed_number,
+            }
+
     video_number = ask_int("MKV video No: ", video_map.keys())
     audio_number = ask_int("MKV audio No: ", audio_map.keys())
-
     selected_video = video_map[video_number]
     selected_audio = audio_map[audio_number]
-    selection = {
-        "mode": "manual",
+    print(f"MKV video: No.{video_number} {describe_video_format(selected_video)}")
+    print(f"MKV audio: No.{audio_number} {describe_audio_format(selected_audio)}")
+    return {
+        "mode": "separate",
         "format_selector": f"{selected_video['format_id']}+{selected_audio['format_id']}",
         "video": selected_video,
         "audio": selected_audio,
@@ -1205,10 +1351,6 @@ def choose_manual_archive_streams(job):
         "video_number": video_number,
         "audio_number": audio_number,
     }
-
-    print(f"MKV video: No.{video_number} {describe_video_format(selected_video)}")
-    print(f"MKV audio: No.{audio_number} {describe_audio_format(selected_audio)}")
-    return selection
 
 def show_job_and_choose_thumbnail(job):
     print(f"\n[{job['item_index']}/{job['total_items']}] {job['title']}")
@@ -1254,7 +1396,7 @@ def show_job_and_choose_thumbnail(job):
 
 def start_job_download(job):
     job["mp4_result"] = {"path": None, "error": None}
-    job["archive_result"] = {"path": None, "error": None}
+    job["archive_result"] = {"path": None, "error": None, "skipped": False}
 
     job["mp4_thread"] = start_worker(
         job["mp4_result"],
@@ -1268,6 +1410,12 @@ def start_job_download(job):
     print(f"[{job['item_index']}/{job['total_items']}] H.264 + AAC のMP4ダウンロードを開始しました。")
 
     job["archive_selection"] = choose_manual_archive_streams(job)
+    if job["archive_selection"] is None:
+        job["archive_result"]["skipped"] = True
+        job["archive_thread"] = None
+        print(f"[{job['item_index']}/{job['total_items']}] MKVは作成しません。")
+        return
+
     job["archive_thread"] = start_worker(
         job["archive_result"],
         download_archive_mkv,
@@ -1281,14 +1429,16 @@ def start_job_download(job):
     )
     print(f"[{job['item_index']}/{job['total_items']}] 選択したストリームでMKVダウンロードを開始しました。")
 
-
 def job_is_alive(job):
-    return job["mp4_thread"].is_alive() or job["archive_thread"].is_alive()
-
+    mp4_alive = job["mp4_thread"].is_alive()
+    archive_thread = job.get("archive_thread")
+    archive_alive = archive_thread.is_alive() if archive_thread else False
+    return mp4_alive or archive_alive
 
 def finalize_job(job):
     job["mp4_thread"].join()
-    job["archive_thread"].join()
+    if job.get("archive_thread"):
+        job["archive_thread"].join()
 
     mp4_path = job["mp4_result"]["path"]
     if job["mp4_result"]["error"]:
@@ -1303,22 +1453,25 @@ def finalize_job(job):
     else:
         print(f"[{job['item_index']}/{job['total_items']}] MP4は完了しましたが、サムネイル埋め込みに失敗しました: {mp4_path}")
 
+    archive_skipped = job["archive_result"].get("skipped", False)
     archive_path = job["archive_result"]["path"]
-    if job["archive_result"]["error"]:
+    if archive_skipped:
+        print(f"[{job['item_index']}/{job['total_items']}] MKVスキップ")
+    elif job["archive_result"]["error"]:
         print(
-            f"[{job['item_index']}/{job['total_items']}] MKVアーカイブ作成に失敗しました: "
+            f"[{job['item_index']}/{job['total_items']}] MKV作成に失敗しました: "
             f"{job['archive_result']['error']}"
         )
     elif not archive_path:
-        print(f"[{job['item_index']}/{job['total_items']}] MKVアーカイブ作成に失敗しました。")
+        print(f"[{job['item_index']}/{job['total_items']}] MKV作成に失敗しました。")
     else:
-        print(f"[{job['item_index']}/{job['total_items']}] MKVアーカイブ完了: {archive_path}")
+        print(f"[{job['item_index']}/{job['total_items']}] MKV完了: {archive_path}")
 
-    if mp4_path and archive_path and not job["mp4_result"]["error"] and not job["archive_result"]["error"]:
+    archive_ok = archive_skipped or (archive_path and not job["archive_result"]["error"])
+    if mp4_path and not job["mp4_result"]["error"] and archive_ok:
         remove_pending_url(job.get("url"))
 
     cleanup_folder(job["thumb_folder"])
-
 
 def drain_completed_jobs(active_jobs):
     remaining_jobs = []
@@ -1404,6 +1557,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 
