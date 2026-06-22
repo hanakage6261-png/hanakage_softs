@@ -1,3 +1,4 @@
+import importlib
 import sys
 from pathlib import Path
 
@@ -13,7 +14,8 @@ for candidate_dir in (BASE_DIR, *BASE_DIR.parents):
 else:
     raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
-from momonGA_registry import load_module
+momonGA_registry = importlib.import_module("momonGA_registry")
+load_module = momonGA_registry.load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection

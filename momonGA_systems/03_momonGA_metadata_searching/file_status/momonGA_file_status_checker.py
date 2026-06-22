@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 import re
@@ -17,7 +18,9 @@ for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
 else:
     raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
-from momonGA_registry import get_directory, load_module
+momonGA_registry = importlib.import_module("momonGA_registry")
+get_directory = momonGA_registry.get_directory
+load_module = momonGA_registry.load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection

@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 import shutil
@@ -19,7 +20,8 @@ for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
 else:
     raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
-from momonGA_registry import get_directory
+momonGA_registry = importlib.import_module("momonGA_registry")
+get_directory = momonGA_registry.get_directory
 
 
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
