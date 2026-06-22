@@ -2,17 +2,14 @@
 
 ## この文書の役割
 
-このファイルは `momonGA_systems` 全体の仕様書です。  
-ルートの `README.md` は入口だけを担当し、全体仕様はこの文書に集約します。
-
-各番号付きフォルダの直下には、`01_momonGA_downloader_README.md` のような  
-`_README.md` を置き、そのフォルダの役割と収納物を説明する方針です。  
-書式見本は `00_momonGA_master/docs/README_style_model.md` で管理します。
+このファイルは `momonGA_systems` 全体の構造と動作を説明する設計文書です。
+短い入口はルートの `README.md`、運用方針と対象範囲は `SYSTEM_POLICY.md`、各フォルダ README の書式は `README_style_model.md` で管理します。
 
 ## システム全体
 
-`momonGA_systems` は、作品URLの取得、メタデータ収集、CBZダウンロード、補修、分析までを分担したプログラム群です。  
-フォルダ順は重要度と使用頻度に基づき固定しています。
+`momonGA_systems` は、作品 URL の収集、メタデータ記録、CBZ ダウンロード、ローカル保存状態の追跡、分析、例外処理、旧版保管を分担して運用する一式のプログラム群です。
+
+フォルダ順は次の通りです。
 
 1. `00_momonGA_master`
 2. `01_momonGA_downloader`
@@ -23,86 +20,83 @@
 7. `06_momonGA_legacies`
 8. `07_momonGA_systems_projects`
 
-## 依存の基準点
+## 共通参照
 
-全スクリプトの共通参照起点は `00_momonGA_master/momonGA_registry.py` です。  
-今後、場所参照は原則としてこのレジストリ経由に寄せます。
+全スクリプトの共通パス参照は `00_momonGA_master/momonGA_registry.py` に集約します。
+ファイル名やフォルダ構造が変わっても、各スクリプトはできるだけこのレジストリ経由で主要パスを参照します。
 
-## 00 の考え方
+## 00 の扱い
 
-`00_momonGA_master` は「全体に関するもの」を置くフォルダです。  
-ただし中で役割を分けます。
+`00_momonGA_master` は全体共通のものだけを置くフォルダです。
 
 - `momonGA_registry.py`
-  - 実際の制御用レジストリ
-- `config/`
-  - JSON など設定
+  - 共通の場所参照を管理する
 - `docs/`
-  - 設計書、説明書、書式見本
+  - 全体仕様、運用方針、README 書式見本を管理する
 
-## フォルダ責務
+個別機能専用の設定ファイルは、その機能を担当するフォルダに置きます。
+そのため `momonGA_file_status_checker_paths.json` は `03_momonGA_metadata_searching` に置きます。
+
+## フォルダ役割
 
 ### `00_momonGA_master`
 
-- レジストリ
-- 全体設定
+- 全体共通レジストリ
 - 全体文書
 
 ### `01_momonGA_downloader`
 
-- URLから作品を取得する
-- ダウンロード成功時に `work_state.downloaded` と `work_state.download_count` を更新する
-- 保存ファイル名は `[作者名] タイトル ID.cbz`
+- URL から作品をダウンロードする
+- ダウンロード時に `work_state.downloaded` と `work_state.download_count` を更新する
+- 出力ファイル名は `[作者名] タイトル ID.cbz`
 
 ### `02_momonGA_database`
 
 - `momonGA_metadata.db`
 - `momonGA_metadata_store.py`
-- DBスキーマ移行と共通DB API
+- DB 操作と共通 API
 
 ### `03_momonGA_metadata_searching`
 
 - `momonGA_metadata_auto_searching.py`
-  - サイトのID順メタデータ収集
-  - 成功時に `work_state.metadata_check_count` と `work_state.last_metadata_checked_at` を更新
+  - サイト上の ID を調べてメタデータを記録する
+  - `work_state.metadata_check_count` と `work_state.last_metadata_checked_at` を更新する
 - `momonGA_file_status_checker.py`
-  - 設定された絶対パス群を走査し、`work_state.file_present` などを更新
+  - 保存先を走査して `work_state.file_present` などを更新する
+- `momonGA_file_status_checker_paths.json`
+  - file status checker 専用の走査先設定
 - `momonGA_searching_state.json`
   - 自動探索の再開位置
 
 ### `04_momonGA_patch`
 
-- `momonGA_metadata_manual_searching.py`
-  - URL指定でメタデータ登録
-- `momonGA_authordata_eliminater.py`
-  - 例外的なファイル名修正
-- `momonGA_pdf_to_cbz_redownload_helper.py`
-  - 旧PDF名からサイト検索し、候補URL群をJSONへ保存
-  - DBにもダウンローダー再開JSONにも書かない
+- 例外処理や補助的な再取得処理
+- 手動メタデータ取得
+- PDF から CBZ への再ダウンロード支援
 
 ### `05_momonGA_utilize`
 
-- DB検索、集計、分析
-- `works_with_state` ビュー経由で両表をまとめて参照する
+- DB を使った分析や調査
+- 基本的に `works_with_state` ビュー経由で扱う
 
 ### `06_momonGA_legacies`
 
 - 旧スクリプトの保管
-- `momonGA_basis` はアーカイブ扱い
+- `momonGA_basis` を含むアーカイブ置き場
 
 ### `07_momonGA_systems_projects`
 
-- 将来案
+- アイデアメモ
 - todo
 - bugs
 
-## DB設計
+## DB 設計
 
-DBファイル: `02_momonGA_database/momonGA_metadata.db`
+DB ファイルは `02_momonGA_database/momonGA_metadata.db` です。
 
 ### `works`
 
-サイト上のメタデータと存在状態を持つ表です。
+サイト上の状態とメタデータを記録します。
 
 - `id`
 - `title`
@@ -120,7 +114,7 @@ DBファイル: `02_momonGA_database/momonGA_metadata.db`
 
 ### `work_state`
 
-ローカル運用状態を持つ表です。主キーは `id` です。
+ローカル保存状態を記録します。主キーは `id` です。
 
 - `downloaded`
 - `download_count`

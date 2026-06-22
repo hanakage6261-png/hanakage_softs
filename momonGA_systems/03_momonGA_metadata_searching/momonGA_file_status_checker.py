@@ -17,7 +17,7 @@ for candidate_dir in (CURRENT_DIR, *CURRENT_DIR.parents):
 else:
     raise RuntimeError("00_momonGA_master/momonGA_registry.py が見つかりません。")
 
-from momonGA_registry import get_config_file, load_module
+from momonGA_registry import get_directory, load_module
 
 metadata_store = load_module("metadata_store")
 open_metadata_connection = metadata_store.open_metadata_connection
@@ -25,7 +25,7 @@ reset_all_file_statuses = metadata_store.reset_all_file_statuses
 update_file_status = metadata_store.update_file_status
 
 
-CONFIG_PATH = get_config_file("momonGA_file_status_checker_paths.json")
+CONFIG_PATH = get_directory("metadata_searching") / "momonGA_file_status_checker_paths.json"
 CBZ_SUFFIX = ".cbz"
 WORK_ID_PATTERN = re.compile(r"(?P<id>\d+)(?: \(\d+\))?$")
 

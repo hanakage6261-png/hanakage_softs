@@ -1082,7 +1082,9 @@ def build_pending_input_queue():
         print("新しいURLを追加すると、復元したURLに続けて処理します。")
 
     new_urls = collect_input_urls()
-    combined_urls = dedupe_urls(resumed_urls + new_urls)
+    if resumed_urls and new_urls:
+        print("新しいURLを先に処理し、前回未完了のURLはその後に回します。")
+    combined_urls = dedupe_urls(new_urls + resumed_urls)
     return filter_supported_urls(combined_urls, "入力URL")
 
 
