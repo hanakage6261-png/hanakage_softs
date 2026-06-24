@@ -4,6 +4,25 @@ This script wraps `yt-dlp` so you can paste one or more Xvideos page URLs and sa
 
 Use it only for videos that you own or have permission to download, and make sure your use follows the site's rules.
 
+このプログラムの目的はフリー動画投稿サイトXvideosから動画をダウンロードすることである。
+
+
+# 対象のサイトのURL
+https://www.xvideos.com/
+
+
+## 具体的な動画のURL
+-https://www.xvideos.com/video.opkmpfh0266/48841954/0/every_date_should_end_like_this_-_mira_david
+-https://www.xvideos.com/video.klkdkp9a14/_
+-https://www.xvideos.com/video.uomllff4a04/_3_
+
+## 具体的なチャンネルのURL
+-https://www.xvideos.com/profiles/goku0720
+-https://www.xvideos.com/everything-butt-1
+
+
+
+
 ## Setup
 
 Install or update `yt-dlp`:

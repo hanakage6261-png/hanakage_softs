@@ -1,0 +1,1 @@
+pyinstaller --onefile --add-binary "ffmpeg.exe;." ffmpeg_thumbnail_converter.py
