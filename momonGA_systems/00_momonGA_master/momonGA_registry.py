@@ -24,6 +24,7 @@ DIRECTORIES = {
 }
 
 MODULE_PATHS = {
+    "url_rules": MASTER_DIR / "momonGA_url_rules.py",
     "metadata_store": DIRECTORIES["database"] / "momonGA_metadata_store.py",
     "downloader_main": DIRECTORIES["downloader"] / "momonGA_downloader.py",
     "metadata_auto_searching": DIRECTORIES["metadata_searching"] / "site_metadata_searcher" / "momonGA_metadata_auto_searching.py",

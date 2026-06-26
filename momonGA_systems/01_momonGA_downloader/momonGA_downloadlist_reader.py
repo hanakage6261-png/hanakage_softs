@@ -21,14 +21,16 @@ else:
 momonGA_registry = importlib.import_module("momonGA_registry")
 load_module = momonGA_registry.load_module
 
+url_rules = load_module("url_rules")
+filter_supported_urls = url_rules.filter_supported_urls
+normalize_url = url_rules.normalize_url
+
 downloader_module = load_module("downloader_main")
 RESUME_TEMP_SUFFIX = downloader_module.RESUME_TEMP_SUFFIX
 RESUME_SAVE_RETRY_ATTEMPTS = downloader_module.RESUME_SAVE_RETRY_ATTEMPTS
 RESUME_SAVE_RETRY_SECONDS = downloader_module.RESUME_SAVE_RETRY_SECONDS
 dedupe_urls = downloader_module.dedupe_urls
-filter_supported_urls = downloader_module.filter_supported_urls
 get_resume_file_path = downloader_module.get_resume_file_path
-normalize_url = downloader_module.normalize_url
 
 
 ENCODINGS = ("utf-8-sig", "utf-8", "cp932")

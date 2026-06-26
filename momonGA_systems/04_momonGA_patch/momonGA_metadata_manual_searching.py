@@ -23,14 +23,16 @@ open_metadata_connection = metadata_store.open_metadata_connection
 record_metadata_check = metadata_store.record_metadata_check
 upsert_work = metadata_store.upsert_work
 
+url_rules = load_module("url_rules")
+get_url_kind = url_rules.get_url_kind
+normalize_url = url_rules.normalize_url
+
 downloader_module = load_module("downloader_main")
 create_session = downloader_module.create_session
 dedupe_urls = downloader_module.dedupe_urls
 extract_work_urls_from_soup = downloader_module.extract_work_urls_from_soup
 fetch_work_summary = downloader_module.fetch_work_summary
-get_url_kind = downloader_module.get_url_kind
 iter_collection_pages = downloader_module.iter_collection_pages
-normalize_url = downloader_module.normalize_url
 work_to_db_record = downloader_module.work_to_db_record
 
 
@@ -43,7 +45,13 @@ def collect_input_urls():
         raw_url = input(f"URL {len(urls) + 1}: ").strip()
         if not raw_url:
             return dedupe_urls(urls)
-        urls.append(normalize_url(raw_url))
+        normalized_url = normalize_url(raw_url)
+        try:
+            get_url_kind(normalized_url)
+        except RuntimeError as exc:
+            print(f"入力URLエラー: {exc}")
+            continue
+        urls.append(normalized_url)
 
 
 def expand_metadata_urls(session, input_url: str):
