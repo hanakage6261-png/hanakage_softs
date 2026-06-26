@@ -28,7 +28,7 @@ reset_all_file_statuses = metadata_store.reset_all_file_statuses
 update_file_status = metadata_store.update_file_status
 
 
-CONFIG_PATH = get_directory("metadata_searching") / "momonGA_file_status_checker_paths.json"
+CONFIG_PATH = get_directory("metadata_searching") / "file_status_checker" / "momonGA_file_status_checker_paths.json"
 CBZ_SUFFIX = ".cbz"
 WORK_ID_PATTERN = re.compile(r"(?P<id>\d+)(?: \(\d+\))?$")
 

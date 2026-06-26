@@ -12,28 +12,30 @@
 
 - [momonGA_database_mode_searching.py](./momonGA_database_mode_searching.py)
 
-  author や circle などの項目ごとの頻出値を集計するプログラムです。
+  author や circle などの項目ごとの頻出値またはワードをカウントして表示するプログラムです。
 
 ---
 
 - [momonGA_database_search.py](./momonGA_database_search.py)
 
-  キーワードでDBを検索し、`works_with_state` の内容を一覧表示するプログラムです。
+  ユーザーが入力したキーワードをDBで検索し、`works_with_state` の内容を一覧表示するプログラムです。
 
 ---
 
 - [momonGA_ID_analyzing.py](./momonGA_ID_analyzing.py)
 
   ID帯ごとの件数、found件数、downloaded件数を集計するプログラムです。
+  どのID帯にどのくらい作品が存在しているのかを調べます。
 
 ---
 
 - [momonGA_timeline_analyzing.py](./momonGA_timeline_analyzing.py)
 
-  日付情報を月単位で集計し、作品の時系列分布を見るためのプログラムです。
+  作品の日付情報を月単位で集計し、作品の時系列分布を見るためのプログラムです。
 
 ---
 
 - [random_select.py](./random_select.py)
 
-  DBからランダムに1件選び、作品情報を簡易的に確認するためのプログラムです。
+  DBからランダムに1件選び、作品情報を簡易的に抽出するためのプログラムです。
+  適当に作品をおすすめするためのプログラムです。

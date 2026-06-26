@@ -1,0 +1,4 @@
+"C:\Users\owner\Documents\花田武志\01 成果物\momonGA_systems\07_momonGA_systems_projects\archive"
+というフォルダを作成しました。
+  処理された事案に関するテキストファイルはここに手動で移動します。
+実際に先程の03関連のフォルダ名変更に関するテキストファイルもそちらに移動しました。

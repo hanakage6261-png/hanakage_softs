@@ -1,0 +1,3 @@
+"C:\Users\owner\Documents\花田武志\01 成果物\momonGA_systems\03_momonGA_metadata_searching\site_metadata"
+このフォルダだけどsite_metadataだとなのファイルかよくわからないから、
+site_metadata_searcherにしたほうがいいかもなと思ったので変えた。

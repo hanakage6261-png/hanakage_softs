@@ -26,8 +26,8 @@ DIRECTORIES = {
 MODULE_PATHS = {
     "metadata_store": DIRECTORIES["database"] / "momonGA_metadata_store.py",
     "downloader_main": DIRECTORIES["downloader"] / "momonGA_downloader.py",
-    "metadata_auto_searching": DIRECTORIES["metadata_searching"] / "momonGA_metadata_auto_searching.py",
-    "file_status_checker": DIRECTORIES["metadata_searching"] / "momonGA_file_status_checker.py",
+    "metadata_auto_searching": DIRECTORIES["metadata_searching"] / "site_metadata_searcher" / "momonGA_metadata_auto_searching.py",
+    "file_status_checker": DIRECTORIES["metadata_searching"] / "file_status_checker" / "momonGA_file_status_checker.py",
     "metadata_manual_searching": DIRECTORIES["patch"] / "momonGA_metadata_manual_searching.py",
     "author_data_eliminater": DIRECTORIES["patch"] / "momonGA_authordata_eliminater.py",
     "metadata_researching_for_null_ids": DIRECTORIES["legacies"] / "momonGA_metadata_researching_for_null_IDs.py",

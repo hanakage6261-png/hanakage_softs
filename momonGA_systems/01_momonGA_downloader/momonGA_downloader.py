@@ -41,6 +41,7 @@ record_download_event = metadata_store.record_download_event
 upsert_work = metadata_store.upsert_work
 
 
+
 IMG_URL_TEMPLATE = "https://z3.momon-ga.com/galleries/{}/{}.webp"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -57,9 +58,26 @@ MAX_BACKOFF_SECONDS = 180
 MAX_RETRY_ATTEMPTS = 8
 UNKNOWN_PAGE_LIMIT = 1000
 MAX_COLLECTION_PAGES = 200
-WORK_PATH_PATTERN = re.compile(r"/(?:magazine|fanzine)/mo(\d+)/?$", re.IGNORECASE)
+ALLOWED_SITE_HOST = "momon-ga.com"
+ROOT_COLLECTION_SEGMENTS = {
+    "fanzine",
+    "magazine",
+    "trend",
+    "popularity",
+    "comments",
+    "rated",
+    "mylist",
+    "history",
+}
+METADATA_COLLECTION_SEGMENTS = {
+    "parody",
+    "group",
+    "cartoonist",
+    "character",
+    "tag",
+}
+WORK_PATH_PATTERN = re.compile(r"^/(?:magazine|fanzine)/mo(\d+)/?$", re.IGNORECASE)
 WORK_ID_PATTERN = re.compile(r"mo(\d+)", re.IGNORECASE)
-COLLECTION_PATH_PATTERN = re.compile(r"^/(?:cartoonist|group)/", re.IGNORECASE)
 DATE_PATTERN = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 WINDOWS_RESERVED_NAMES = {
     "CON", "PRN", "AUX", "NUL",
@@ -141,9 +159,11 @@ def normalize_url(url: str) -> str:
     if not parts.netloc:
         parts = urlsplit(f"https://{normalized}")
 
-    path = parts.path or "/"
+    path = re.sub(r"/{2,}", "/", parts.path or "/")
+    if path != "/" and not path.endswith("/"):
+        path += "/"
     return urlunsplit((
-        parts.scheme.lower() or "https",
+        "https",
         parts.netloc.lower(),
         path,
         parts.query,
@@ -176,13 +196,69 @@ def get_work_id(url: str) -> str:
     return match.group(1)
 
 
+def contains_embedded_url(path: str) -> bool:
+    lowered = path.lower()
+    return "http://" in lowered or "https://" in lowered
+
+
+def is_root_collection_path(path: str) -> bool:
+    segments = [segment for segment in path.split("/") if segment]
+    if not segments:
+        return False
+
+    root = segments[0].lower()
+    if root not in ROOT_COLLECTION_SEGMENTS:
+        return False
+
+    if len(segments) == 1:
+        return True
+
+    return (
+        len(segments) == 3
+        and segments[1].lower() == "page"
+        and segments[2].isdigit()
+    )
+
+
+def is_metadata_collection_path(path: str) -> bool:
+    segments = [segment for segment in path.split("/") if segment]
+    if len(segments) < 2:
+        return False
+
+    root = segments[0].lower()
+    if root not in METADATA_COLLECTION_SEGMENTS:
+        return False
+
+    if len(segments) == 2:
+        return True
+
+    return (
+        len(segments) == 4
+        and segments[2].lower() == "page"
+        and segments[3].isdigit()
+    )
+
+
+def is_collection_path(path: str) -> bool:
+    if contains_embedded_url(path):
+        return False
+    return is_root_collection_path(path) or is_metadata_collection_path(path)
+
+
 def get_url_kind(url: str) -> str:
     normalized_url = normalize_url(url)
-    path = urlsplit(normalized_url).path
+    parts = urlsplit(normalized_url)
+    path = parts.path
+
+    if parts.netloc.lower() != ALLOWED_SITE_HOST:
+        raise RuntimeError("momon-ga.com のURLのみ入力できます。")
+
+    if contains_embedded_url(path):
+        raise RuntimeError("URLの途中に別のURLが連結されています。1行に1URLだけ入力してください。")
 
     if WORK_PATH_PATTERN.search(path):
         return "work"
-    if COLLECTION_PATH_PATTERN.search(path) or is_search_result_url(normalized_url):
+    if is_collection_path(path) or is_search_result_url(normalized_url):
         return "collection"
 
     raise RuntimeError(
@@ -848,7 +924,15 @@ def collect_input_urls():
         input_url = input(prompt).strip()
         if not input_url:
             return collected_urls
-        collected_urls.append(normalize_url(input_url))
+
+        normalized_url = normalize_url(input_url)
+        try:
+            get_url_kind(normalized_url)
+        except RuntimeError as exc:
+            print(f"入力URLエラー: {exc}")
+            continue
+
+        collected_urls.append(normalized_url)
 
 
 def dedupe_urls(urls):

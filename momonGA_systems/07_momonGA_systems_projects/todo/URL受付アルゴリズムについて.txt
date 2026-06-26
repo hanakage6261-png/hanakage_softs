@@ -1,0 +1,3 @@
+このまえmomonGA_downloader.pyに受付るURLの型を限定してそれ以外ははじくようにしたけど、これこのダウンロードプログラムだけでなくmomonGA_metadata_manual_searching.py
+とか他の、手動でURL入力するプログラムでも使えるからこれ独立した関数かなんかにしてC:\Users\owner\Documents\花田武志\01 成果物\momonGA_systems\00_momonGA_master
+で管理したほうがいいのでは？
