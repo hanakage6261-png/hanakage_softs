@@ -21,6 +21,9 @@ from bs4 import BeautifulSoup
 from PIL import Image
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
 for candidate_dir in (Path(CURRENT_DIR), *Path(CURRENT_DIR).parents):
     registry_dir = candidate_dir / "00_momonGA_master"
     registry_path = registry_dir / "momonGA_registry.py"
@@ -1176,6 +1179,117 @@ def main():
 
     print("\nすべての処理を終了しました。")
     input("Enterキーで終了します...")
+
+from momonGA_modules.momonGA_downloader_modules_archive import momonGA_downloader_archive as archive_helpers
+from momonGA_modules.momonGA_downloader_modules_network import momonGA_downloader_network as network_helpers
+from momonGA_modules.momonGA_downloader_modules_queue import momonGA_downloader_queue as queue_helpers
+from momonGA_modules.momonGA_downloader_modules_shared import momonGA_downloader_shared as shared_helpers
+from momonGA_modules.momonGA_downloader_modules_targets import momonGA_downloader_targets as target_helpers
+
+
+APP_FOLDER_NAME = shared_helpers.APP_FOLDER_NAME
+RESUME_FILE_NAME = shared_helpers.RESUME_FILE_NAME
+RESUME_TEMP_SUFFIX = shared_helpers.RESUME_TEMP_SUFFIX
+RESUME_SAVE_RETRY_ATTEMPTS = shared_helpers.RESUME_SAVE_RETRY_ATTEMPTS
+RESUME_SAVE_RETRY_SECONDS = shared_helpers.RESUME_SAVE_RETRY_SECONDS
+UNKNOWN_PAGE_LIMIT = shared_helpers.UNKNOWN_PAGE_LIMIT
+MAX_COLLECTION_PAGES = shared_helpers.MAX_COLLECTION_PAGES
+ALLOWED_SITE_HOST = shared_helpers.ALLOWED_SITE_HOST
+ROOT_COLLECTION_SEGMENTS = shared_helpers.ROOT_COLLECTION_SEGMENTS
+METADATA_COLLECTION_SEGMENTS = shared_helpers.METADATA_COLLECTION_SEGMENTS
+WORK_PATH_PATTERN = shared_helpers.WORK_PATH_PATTERN
+WORK_ID_PATTERN = shared_helpers.WORK_ID_PATTERN
+DATE_PATTERN = shared_helpers.DATE_PATTERN
+FatalNetworkError = shared_helpers.FatalNetworkError
+WorkSummary = shared_helpers.WorkSummary
+
+normalize_url = shared_helpers.normalize_url
+ensure_trailing_slash = shared_helpers.ensure_trailing_slash
+get_app_base_dir = shared_helpers.get_app_base_dir
+get_resume_file_path = shared_helpers.get_resume_file_path
+get_work_id = shared_helpers.get_work_id
+contains_embedded_url = shared_helpers.contains_embedded_url
+is_root_collection_path = shared_helpers.is_root_collection_path
+is_metadata_collection_path = shared_helpers.is_metadata_collection_path
+is_collection_path = shared_helpers.is_collection_path
+get_url_kind = shared_helpers.get_url_kind
+is_search_result_url = shared_helpers.is_search_result_url
+get_unique_path = shared_helpers.get_unique_path
+sanitize_filename = shared_helpers.sanitize_filename
+list_non_c_drives = shared_helpers.list_non_c_drives
+
+create_session = network_helpers.create_session
+decode_response_html = network_helpers.decode_response_html
+get_backoff_seconds = network_helpers.get_backoff_seconds
+request_with_backoff = network_helpers.request_with_backoff
+download_binary = network_helpers.download_binary
+fetch_soup = network_helpers.fetch_soup
+
+parse_pages = target_helpers.parse_pages
+parse_latest_date = target_helpers.parse_latest_date
+extract_author = target_helpers.extract_author
+extract_text_by_id = target_helpers.extract_text_by_id
+extract_tag_lists = target_helpers.extract_tag_lists
+is_not_found_page = target_helpers.is_not_found_page
+work_to_db_record = target_helpers.work_to_db_record
+fetch_work_summary = target_helpers.fetch_work_summary
+get_first_image_hash = target_helpers.get_first_image_hash
+choose_preferred_work = target_helpers.choose_preferred_work
+is_collection_page_url = target_helpers.is_collection_page_url
+extract_work_urls_from_soup = target_helpers.extract_work_urls_from_soup
+iter_collection_pages = target_helpers.iter_collection_pages
+
+collect_input_urls = queue_helpers.collect_input_urls
+dedupe_urls = queue_helpers.dedupe_urls
+filter_supported_urls = shared_helpers.filter_supported_urls
+format_work_brief = queue_helpers.format_work_brief
+parse_excluded_indexes = queue_helpers.parse_excluded_indexes
+prompt_excluded_works = queue_helpers.prompt_excluded_works
+load_resume_queue = queue_helpers.load_resume_queue
+save_resume_state = queue_helpers.save_resume_state
+clear_resume_state = queue_helpers.clear_resume_state
+build_pending_input_queue = queue_helpers.build_pending_input_queue
+
+download_image = archive_helpers.download_image
+download_gallery_images = archive_helpers.download_gallery_images
+build_cbz = archive_helpers.build_cbz
+
+
+def resolve_collection_targets(session, metadata_connection, collection_url: str):
+    return target_helpers.resolve_collection_targets(
+        session,
+        collection_url,
+        record_work=lambda work: upsert_work(metadata_connection, work_to_db_record(work)),
+    )
+
+
+def resolve_download_targets(session, metadata_connection, input_url: str):
+    return target_helpers.resolve_download_targets(
+        session,
+        input_url,
+        record_work=lambda work: upsert_work(metadata_connection, work_to_db_record(work)),
+    )
+
+
+def prompt_exclude_downloaded_works(metadata_connection, works):
+    if not works:
+        return works
+
+    work_ids = [int(work.work_id) for work in works]
+    downloaded_ids = fetch_downloaded_ids(metadata_connection, work_ids)
+    return queue_helpers.prompt_exclude_downloaded_works(downloaded_ids, works)
+
+
+def process_work(session, save_root: str, metadata_connection, work: WorkSummary):
+    return archive_helpers.process_work(
+        session,
+        save_root,
+        work,
+        record_completed_work=lambda completed_work: (
+            upsert_work(metadata_connection, work_to_db_record(completed_work)),
+            record_download_event(metadata_connection, int(completed_work.work_id)),
+        ),
+    )
 
 
 if __name__ == "__main__":
