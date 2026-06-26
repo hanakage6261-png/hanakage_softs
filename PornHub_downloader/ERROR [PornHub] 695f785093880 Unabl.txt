@@ -1,0 +1,8 @@
+ERROR: [PornHub] 695f785093880: Unable to download webpage: HTTP Error 410: Gone (caused by <HTTPError 410: Gone>) 
+Download failed: ERROR: [PornHub] 695f785093880: Unable to download webpage: HTTP Error 410: Gone (caused by <HTTPError 410: Gone>)
+
+
+  File "C:\Users\owner\Documents\花田武志\01 成果物\PornHub_downloader\pornhub_downloader.py", line 651, in <module>
+    raise SystemExit(main())
+SystemExit: 1
+
